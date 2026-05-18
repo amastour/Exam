@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard – Terraform Exam</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">🏗️ Terraform Exam – TA-004</div>
+    <div class="nav-actions">
+      <span class="nav-user">👤 {{ user.username }}</span>
+      {% if user.role == 'admin' %}
+        <a href="/admin" class="btn btn-sm btn-outline">Admin Panel</a>
+      {% endif %}
+      <button onclick="logout()" class="btn btn-sm btn-danger">Logout</button>
+    </div>
+  </nav>
+
+  <div class="container">
+    <!-- Exam Token Redeem -->
+    <section class="section">
+      <h2>🎟️ Enter Exam Token</h2>
+      <div class="create-user-form">
+        <input type="text" id="examTokenInput" class="input-field" placeholder="Paste your exam token (et-…)">
+        <button class="btn btn-primary" onclick="redeemToken()">▶ Start Exam</button>
+      </div>
+      <div id="tokenError" class="error-msg hidden"></div>
+      <p class="hint">Your admin will provide you a token that starts an exam with the right settings.</p>
+    </section>
+
+    {% if user.role != 'admin' and exams %}
+    <!-- Visible quizzes for regular users -->
+    <section class="section">
+      <h2>📚 Available Quizzes</h2>
+      <div class="exam-grid">
+        {% for exam in exams %}
+        <div class="exam-card">
+          <div class="exam-card-header">
+            <span class="exam-badge">
+              {% if exam.exam_type == 'objective' %}📚{% else %}📝{% endif %}
+              #{{ exam.id }}
+            </span>
+            <span class="exam-count">{{ exam.total }} questions</span>
+          </div>
+          <h3>{{ exam.title }}</h3>
+          <div class="exam-start-options">
+            <div class="exam-mode-row">
+              <label class="mode-label"><input type="radio" name="mode-{{ exam.id }}" value="practice" checked> Practice</label>
+              <label class="mode-label"><input type="radio" name="mode-{{ exam.id }}" value="exam"> Exam</label>
+              <span class="mode-sep">|</span>
+              <input type="number" id="dur-{{ exam.id }}" class="dur-input" value="60" min="5" max="300" title="Duration (minutes)">
+              <span class="dur-unit">min</span>
+            </div>
+          </div>
+          <div class="exam-card-actions">
+            <button onclick="startExam({{ exam.id }})" class="btn btn-primary">Start / Continue</button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    {% if user.role == 'admin' %}
+    <!-- Exams (admin only) -->
+    <section class="section">
+      <h2>📋 All Exams <span class="small-text" style="font-weight:400">(admin view)</span></h2>
+      <div class="exam-grid">
+        {% for exam in exams %}
+        <div class="exam-card">
+          <div class="exam-card-header">
+            <span class="exam-badge">
+              {% if exam.exam_type == 'objective' %}📚{% else %}📝{% endif %}
+              #{{ exam.id }}
+            </span>
+            <span class="exam-count">{{ exam.total }} questions</span>
+          </div>
+          {% if exam.exam_type == 'objective' %}
+            <span class="badge badge-admin" style="font-size:.72rem;margin-bottom:8px;display:inline-block">Objective Quiz</span>
+          {% elif exam.source == 'db' %}
+            <span class="badge badge-user" style="font-size:.72rem;margin-bottom:8px;display:inline-block">Custom</span>
+          {% endif %}
+          <h3>{{ exam.title }}</h3>
+          <div class="exam-start-options">
+            <div class="exam-mode-row">
+              <label class="mode-label"><input type="radio" name="mode-{{ exam.id }}" value="practice" checked> Practice</label>
+              <label class="mode-label"><input type="radio" name="mode-{{ exam.id }}" value="exam"> Exam</label>
+              <span class="mode-sep">|</span>
+              <input type="number" id="dur-{{ exam.id }}" class="dur-input" value="60" min="5" max="300" title="Duration (minutes)">
+              <span class="dur-unit">min</span>
+            </div>
+          </div>
+          <div class="exam-card-actions">
+            <button onclick="startExam({{ exam.id }})" class="btn btn-primary">Start / Continue</button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <!-- History -->
+    <section class="section">
+      <h2>📊 My Exam History</h2>
+      {% if sessions %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Exam</th>
+              <th>Status</th>
+              <th>Score</th>
+              <th>Pct</th>
+              <th>Started</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in sessions %}
+            <tr>
+              <td>Exam #{{ s.exam_id }}</td>
+              <td>
+                <span class="badge {% if s.status == 'finished' %}badge-success{% else %}badge-warning{% endif %}">
+                  {{ s.status }}
+                </span>
+              </td>
+              <td>{% if s.score is not none %}{{ s.score }} / {{ s.total }}{% else %}–{% endif %}</td>
+              <td>
+                {% if s.score is not none and s.total %}
+                  {% set pct = (s.score / s.total * 100) | round(1) %}
+                  <span class="pct {% if pct >= 70 %}pass{% else %}fail{% endif %}">{{ pct }}%</span>
+                {% else %}–{% endif %}
+              </td>
+              <td class="small-text">{{ s.started_at }}</td>
+              <td>
+                {% if s.status == 'finished' %}
+                  <a href="/results/{{ s.id }}" class="btn btn-sm btn-outline">View Results</a>
+                {% else %}
+                  <a href="/exam/{{ s.exam_id }}" class="btn btn-sm btn-primary">Resume</a>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <p>No exams taken yet. Start your first exam above! 🚀</p>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+
+  <script>
+    async function logout() {
+      await fetch('/api/logout', { method: 'POST' });
+      window.location.href = '/login';
+    }
+    function startExam(examId) {
+      const mode = document.querySelector(`input[name="mode-${examId}"]:checked`).value;
+      const dur = document.getElementById(`dur-${examId}`).value || 60;
+      window.location.href = `/exam/${examId}?mode=${mode}&duration=${dur}`;
+    }
+    async function redeemToken() {
+      const token = document.getElementById('examTokenInput').value.trim();
+      const errEl = document.getElementById('tokenError');
+      errEl.classList.add('hidden');
+      if (!token) { errEl.textContent = 'Please enter a token.'; errEl.classList.remove('hidden'); return; }
+      const res = await fetch('/api/redeem_exam_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exam_token: token })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.href = `/exam/${data.exam_id}?mode=${data.mode}&duration=${data.duration}`;
+      } else {
+        errEl.textContent = data.error || 'Invalid token';
+        errEl.classList.remove('hidden');
+      }
+    }
+  </script>
+</body>
+</html>

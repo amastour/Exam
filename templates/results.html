@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Results – Terraform Exam</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">🏗️ Terraform Exam – Results</div>
+    <div class="nav-actions">
+      {% if user.role == 'admin' and session.owner_username != user.username %}
+        <span class="nav-user">👁 Viewing: <b>{{ session.owner_username }}</b></span>
+      {% else %}
+        <span class="nav-user">👤 {{ user.username }}</span>
+      {% endif %}
+      <a href="/dashboard" class="btn btn-sm btn-outline">Dashboard</a>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <!-- Score Card -->
+    {% set pct = (session.score / session.total * 100) | round(1) if session.total else 0 %}
+    <div class="score-card {% if pct >= 70 %}score-pass{% else %}score-fail{% endif %}">
+      <div class="score-circle">
+        <span class="score-num">{{ pct }}%</span>
+        <span class="score-label">{{ 'PASS' if pct >= 70 else 'FAIL' }}</span>
+      </div>
+      <div class="score-details">
+        <h2>Exam #{{ session.exam_id }} Results</h2>
+        <div class="score-breakdown">
+          <div class="sb-item correct">✅ Correct: {{ session.score }}</div>
+          <div class="sb-item incorrect">❌ Incorrect: {{ answers | selectattr('result', 'equalto', 'incorrect') | list | length }}</div>
+          <div class="sb-item skipped">⏭ Skipped: {{ answers | selectattr('result', 'equalto', 'skipped') | list | length }}</div>
+          <div class="sb-item total">📋 Total: {{ session.total }}</div>
+        </div>
+        <p class="pass-threshold">Passing threshold: 70% ({{ (session.total * 0.7) | round | int }} correct)</p>
+      </div>
+    </div>
+
+    <!-- Metrics by Objective -->
+    <section class="section">
+      <h2>📊 Performance by Objective</h2>
+      <div class="objectives-grid">
+        {% for obj, data in by_objective.items() %}
+        {% set obj_pct = (data.correct / data.total * 100) | round(1) if data.total else 0 %}
+        <div class="obj-card {% if obj_pct >= 70 %}obj-pass{% else %}obj-fail{% endif %}">
+          <div class="obj-header">
+            <span class="obj-name">{{ obj }}</span>
+            <span class="obj-pct">{{ obj_pct }}%</span>
+          </div>
+          <div class="obj-bar">
+            <div class="obj-fill" style="width: {{ obj_pct }}%"></div>
+          </div>
+          <div class="obj-stats">
+            <span class="obj-stat correct">✅ {{ data.correct }}</span>
+            <span class="obj-stat incorrect">❌ {{ data.incorrect }}</span>
+            <span class="obj-stat skipped">⏭ {{ data.skipped }}</span>
+            <span class="obj-stat total">/ {{ data.total }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <!-- Answer Review -->
+    <section class="section">
+      <h2>🔍 Question Review</h2>
+      <div class="filter-bar">
+        <button class="filter-btn active" onclick="filterAnswers('all')">All ({{ answers|length }})</button>
+        <button class="filter-btn" onclick="filterAnswers('incorrect')">❌ Incorrect ({{ answers | selectattr('result', 'equalto', 'incorrect') | list | length }})</button>
+        <button class="filter-btn" onclick="filterAnswers('skipped')">⏭ Skipped ({{ answers | selectattr('result', 'equalto', 'skipped') | list | length }})</button>
+        <button class="filter-btn" onclick="filterAnswers('correct')">✅ Correct ({{ answers | selectattr('result', 'equalto', 'correct') | list | length }})</button>
+      </div>
+
+      <div id="reviewList">
+        {% for a in answers %}
+        {% set q = questions.get(a.question_num) %}
+        <div class="review-item {{ a.result }}" data-result="{{ a.result }}">
+          <div class="review-header" onclick="toggleReview(this)">
+            <span class="review-icon">
+              {% if a.result == 'correct' %}✅{% elif a.result == 'incorrect' %}❌{% else %}⏭{% endif %}
+            </span>
+            <span class="review-qnum">Q{{ a.question_num }}</span>
+            <span class="review-domain">
+              {{ q.domain if q else (a.domain or '') }}
+              {% if q and q.objective %}<span class="review-subobjective"> · {{ q.objective }}</span>{% endif %}
+            </span>
+            <span class="review-toggle">▼</span>
+          </div>
+          <div class="review-body hidden">
+            {% if q %}
+            <p class="review-question">{{ q.question }}</p>
+            {% if a.result != 'skipped' %}
+            <div class="review-answer">
+              <strong>Your answer:</strong> {{ a.user_answer or '–' }}
+            </div>
+            {% endif %}
+            <div class="review-correct">
+              <strong>Correct answer:</strong>
+              {% if q %}
+                {{ q.correct_answer | join(' | ') if q.correct_answer is iterable and q.correct_answer is not string else q.correct_answer }}
+              {% endif %}
+            </div>
+            <div class="review-explanation">
+              <strong>Explanation:</strong> {{ q.explanation if q else '' }}
+            </div>
+            <div class="review-takeaway">
+              🎯 <strong>Key Takeaway:</strong> {{ q.key_takeaway if q else '' }}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <div class="result-actions">
+      <a href="/exam/{{ session.exam_id }}" class="btn btn-primary btn-lg">🔄 Retake Exam</a>
+      <a href="/dashboard" class="btn btn-outline btn-lg">🏠 Dashboard</a>
+    </div>
+  </div>
+
+  <script>
+    function filterAnswers(type) {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      event.target.classList.add('active');
+      document.querySelectorAll('.review-item').forEach(el => {
+        el.style.display = (type === 'all' || el.dataset.result === type) ? 'block' : 'none';
+      });
+    }
+
+    function toggleReview(header) {
+      const body = header.nextElementSibling;
+      const toggle = header.querySelector('.review-toggle');
+      body.classList.toggle('hidden');
+      toggle.textContent = body.classList.contains('hidden') ? '▼' : '▲';
+    }
+  </script>
+</body>
+</html>

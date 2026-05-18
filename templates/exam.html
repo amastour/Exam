@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ exam.title }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">🏗️ {{ exam.title }}</div>
+    <div class="nav-actions">
+      {% if exam_mode == 'exam' %}
+        <span class="exam-mode-badge">📝 Exam Mode</span>
+      {% else %}
+        <span class="exam-mode-badge practice-badge">🧪 Practice Mode</span>
+      {% endif %}
+      <span id="timerDisplay" class="timer-display"></span>
+      <span class="nav-user">👤 {{ user.username }}</span>
+      <a href="/dashboard" class="btn btn-sm btn-outline">Dashboard</a>
+    </div>
+  </nav>
+
+  <!-- Progress bar -->
+  <div class="exam-progress-bar">
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill" style="width:0%"></div>
+    </div>
+    <div class="progress-info">
+      <span id="progressText">Question 1 of {{ exam.questions|length }}</span>
+      <span id="progressStats" class="progress-stats">✅ 0 &nbsp; ❌ 0 &nbsp; ⏭ 0</span>
+    </div>
+  </div>
+
+  <div class="container exam-container">
+    <!-- Question Navigator -->
+    <div class="question-nav">
+      <div class="nav-title">Questions</div>
+      <div class="nav-grid" id="navGrid">
+        {% for num in exam.questions.keys() %}
+        <button class="nav-btn unanswered" id="nav-{{ num }}" onclick="goTo({{ num }})">{{ num }}</button>
+        {% endfor %}
+      </div>
+      <div class="nav-legend">
+        {% if exam_mode == 'practice' %}
+        <span class="dot correct"></span> Correct
+        <span class="dot incorrect"></span> Incorrect
+        {% else %}
+        <span class="dot correct" style="background:var(--primary)"></span> Answered
+        {% endif %}
+        <span class="dot skipped"></span> Skipped
+        <span class="dot unanswered"></span> Not answered
+      </div>
+    </div>
+
+    <!-- Question Panel -->
+    <div class="question-panel">
+      <div id="questionCard" class="question-card">
+        <div class="q-meta">
+          <span class="q-num" id="qNum">Q1</span>
+          <span class="q-type" id="qType"></span>
+          <span class="q-domain" id="qDomain"></span>
+        </div>
+        <div class="q-text" id="qText">Loading…</div>
+
+        <div id="optionsArea" class="options-area"></div>
+        <div id="openAnswer" class="open-answer hidden">
+          <textarea id="openText" rows="3" placeholder="Type your answer (True/False for true_false questions)…"></textarea>
+        </div>
+
+        <div class="q-actions">
+          <button class="btn btn-outline" id="skipBtn" onclick="skipQuestion()">⏭ Skip</button>
+          <button class="btn btn-primary" id="submitBtn" onclick="submitAnswer()">Submit Answer</button>
+        </div>
+
+        <!-- Feedback panel (hidden until answered) -->
+        <div id="feedbackPanel" class="feedback-panel hidden">
+          <div id="feedbackResult" class="feedback-result"></div>
+          <div class="feedback-section">
+            <strong>✅ Correct Answer:</strong>
+            <div id="feedbackCorrect" class="feedback-answer"></div>
+          </div>
+          <div class="feedback-section">
+            <strong>💡 Explanation:</strong>
+            <div id="feedbackExplanation"></div>
+          </div>
+          <div class="feedback-section">
+            <strong>🎯 Key Takeaway:</strong>
+            <div id="feedbackTakeaway" class="takeaway-box"></div>
+          </div>
+          <div class="feedback-nav">
+            <button class="btn btn-outline" onclick="navigate(-1)">← Previous</button>
+            <button class="btn btn-primary" id="nextBtn" onclick="navigate(1)">Next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Finish Button -->
+  <div class="finish-bar">
+    <button class="btn btn-success btn-lg" onclick="finishExam()">🏁 Finish Exam & See Results</button>
+  </div>
+
+  <script>
+    const EXAM_ID = {{ exam.id }};
+    const SESSION_ID = {{ session_id }};
+    const QUESTIONS = {{ exam.questions.keys() | list | tojson }};
+    const TOTAL = QUESTIONS.length;
+    const EXAM_MODE = {{ exam_mode | tojson }};  // 'practice' or 'exam'
+    const TIME_REMAINING = {{ time_remaining }};  // seconds
+
+    let currentQ = QUESTIONS[0];
+    let answered = {}; // q_num -> {result, correct_answer, explanation, key_takeaway, user_answer}
+    let stats = { correct: 0, incorrect: 0, skipped: 0 };
+
+    // ── Timer ──────────────────────────────────────────────────────────────
+    let timerSeconds = TIME_REMAINING;
+    const timerEl = document.getElementById('timerDisplay');
+
+    function formatTime(s) {
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const sec = s % 60;
+      return h > 0
+        ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+        : `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    }
+
+    function tickTimer() {
+      if (timerSeconds <= 0) {
+        timerEl.textContent = '⏰ 00:00';
+        timerEl.classList.add('timer-expired');
+        autoFinish();
+        return;
+      }
+      timerEl.textContent = '⏱ ' + formatTime(timerSeconds);
+      timerEl.className = 'timer-display' + (timerSeconds <= 300 ? ' timer-warning' : '');
+      timerSeconds--;
+    }
+
+    async function autoFinish() {
+      for (const num of QUESTIONS) {
+        if (!answered[num]) {
+          await fetch('/api/answer', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ session_id: SESSION_ID, question_num: num, skipped: true })
+          });
+        }
+      }
+      await fetch('/api/finish', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ session_id: SESSION_ID })
+      });
+      window.location.href = `/results/${SESSION_ID}`;
+    }
+
+    tickTimer();
+    const timerInterval = setInterval(tickTimer, 1000);
+
+    async function loadQuestion(num) {
+      currentQ = num;
+      document.getElementById('feedbackPanel').classList.add('hidden');
+      document.getElementById('optionsArea').innerHTML = '';
+      document.getElementById('openAnswer').classList.add('hidden');
+      document.getElementById('submitBtn').disabled = false;
+      document.getElementById('skipBtn').disabled = false;
+
+      const res = await fetch(`/api/question/${EXAM_ID}/${num}`);
+      const q = await res.json();
+
+      document.getElementById('qNum').textContent = `Q${num}`;
+      document.getElementById('qType').textContent = q.type.replace(/_/g,' ').toUpperCase();
+      document.getElementById('qDomain').textContent = q.domain;
+      document.getElementById('qText').textContent = q.question;
+
+      updateProgress();
+
+      if (answered[num]) {
+        renderAnswered(q, answered[num]);
+        return;
+      }
+
+      const opts = q.all_options || {};
+      const optKeys = Object.keys(opts);
+
+      if (q.type === 'true_false') {
+        const area = document.getElementById('optionsArea');
+        area.innerHTML = '';
+        ['True', 'False'].forEach(val => {
+          const label = document.createElement('label');
+          label.className = 'option-label';
+          label.innerHTML = `<input type="radio" name="answer" value="${val}"> <span>${val}</span>`;
+          area.appendChild(label);
+        });
+      } else if (q.type === 'multi_select' && optKeys.length > 0) {
+        const area = document.getElementById('optionsArea');
+        area.innerHTML = '<div class="multi-hint">Select all that apply</div>';
+        optKeys.forEach(k => {
+          const label = document.createElement('label');
+          label.className = 'option-label';
+          label.innerHTML = `<input type="checkbox" name="answer" value="${opts[k]}"> <span><b>${k}.</b> ${opts[k]}</span>`;
+          area.appendChild(label);
+        });
+      } else if (optKeys.length > 0) {
+        const area = document.getElementById('optionsArea');
+        area.innerHTML = '';
+        optKeys.forEach(k => {
+          const label = document.createElement('label');
+          label.className = 'option-label';
+          label.innerHTML = `<input type="radio" name="answer" value="${opts[k]}"> <span><b>${k}.</b> ${opts[k]}</span>`;
+          area.appendChild(label);
+        });
+      } else {
+        // No structured options — show open text input
+        document.getElementById('openAnswer').classList.remove('hidden');
+        if (q.type === 'multi_select') {
+          document.getElementById('openText').placeholder = 'Enter all correct answers separated by commas…';
+        }
+      }
+    }
+
+    function renderAnswered(q, ans) {
+      const area = document.getElementById('optionsArea');
+      const opts = q.all_options || {};
+      const optKeys = Object.keys(opts);
+
+      if (q.type === 'true_false') {
+        area.innerHTML = '';
+        ['True', 'False'].forEach(val => {
+          const label = document.createElement('label');
+          label.className = 'option-label answered';
+          const isUserAns = ans.user_answer && ans.user_answer.toLowerCase() === val.toLowerCase();
+          const isCorrect = ans.correct_answer && ans.correct_answer.map(x=>x.toLowerCase()).includes(val.toLowerCase());
+          if (EXAM_MODE !== 'exam') {
+            if (isCorrect) label.classList.add('highlight-correct');
+            if (isUserAns && !isCorrect) label.classList.add('highlight-wrong');
+          } else if (isUserAns) {
+            label.classList.add('highlight-selected');
+          }
+          label.innerHTML = `<input type="radio" disabled ${isUserAns ? 'checked' : ''}> <span>${val}</span>`;
+          area.appendChild(label);
+        });
+      } else if (optKeys.length > 0) {
+        area.innerHTML = '';
+        const isMulti = q.type === 'multi_select';
+        if (isMulti) area.innerHTML = '<div class="multi-hint">Select all that apply</div>';
+        optKeys.forEach(k => {
+          const label = document.createElement('label');
+          label.className = 'option-label answered';
+          const val = opts[k];
+          const isUserAns = ans.user_answer && (Array.isArray(ans.user_answer)
+            ? ans.user_answer.map(x=>x.toLowerCase()).includes(val.toLowerCase())
+            : ans.user_answer.toLowerCase() === val.toLowerCase());
+          const isCorrect = ans.correct_answer && ans.correct_answer.map(x=>x.toLowerCase()).includes(val.toLowerCase());
+          if (EXAM_MODE !== 'exam') {
+            if (isCorrect) label.classList.add('highlight-correct');
+            if (isUserAns && !isCorrect) label.classList.add('highlight-wrong');
+          } else if (isUserAns) {
+            label.classList.add('highlight-selected');
+          }
+          const inputType = isMulti ? 'checkbox' : 'radio';
+          label.innerHTML = `<input type="${inputType}" disabled ${isUserAns ? 'checked' : ''}> <span><b>${k}.</b> ${val}</span>`;
+          area.appendChild(label);
+        });
+      } else {
+        // No structured options — show open text area with previous answer
+        const openEl = document.getElementById('openAnswer');
+        openEl.classList.remove('hidden');
+        const ta = document.getElementById('openText');
+        ta.value = Array.isArray(ans.user_answer) ? ans.user_answer.join(', ') : (ans.user_answer || '');
+        ta.disabled = true;
+      }
+
+      showFeedback(ans);
+      document.getElementById('submitBtn').disabled = true;
+      document.getElementById('skipBtn').disabled = true;
+    }
+
+    function showFeedback(ans) {
+      if (EXAM_MODE === 'exam') return;  // hide feedback until finish in exam mode
+      const panel = document.getElementById('feedbackPanel');
+      const resultEl = document.getElementById('feedbackResult');
+      const correctEl = document.getElementById('feedbackCorrect');
+      const expEl = document.getElementById('feedbackExplanation');
+      const tkEl = document.getElementById('feedbackTakeaway');
+
+      resultEl.className = 'feedback-result ' + (ans.result === 'correct' ? 'result-correct' : ans.result === 'incorrect' ? 'result-incorrect' : 'result-skipped');
+      resultEl.textContent = ans.result === 'correct' ? '✅ Correct!' : ans.result === 'incorrect' ? '❌ Incorrect' : '⏭ Skipped';
+
+      const ca = ans.correct_answer || [];
+      correctEl.textContent = Array.isArray(ca) ? ca.join(' | ') : ca;
+      expEl.textContent = ans.explanation || '';
+      tkEl.textContent = ans.key_takeaway || '';
+      panel.classList.remove('hidden');
+    }
+
+    async function submitAnswer() {
+      const q_res = await fetch(`/api/question/${EXAM_ID}/${currentQ}`);
+      const q = await q_res.json();
+
+      let user_answer;
+      if (q.type === 'multi_select') {
+        const checked = [...document.querySelectorAll('input[name="answer"]:checked')];
+        if (checked.length) {
+          user_answer = checked.map(c => c.value);
+        } else {
+          // No checkboxes — open text fallback, split by comma
+          const raw = document.getElementById('openText').value.trim();
+          if (!raw) { alert('Please enter an answer.'); return; }
+          user_answer = raw.split(',').map(s => s.trim()).filter(Boolean);
+        }
+      } else if (document.querySelector('input[name="answer"]')) {
+        const sel = document.querySelector('input[name="answer"]:checked');
+        if (!sel) { alert('Please select an answer.'); return; }
+        user_answer = sel.value;
+      } else {
+        user_answer = document.getElementById('openText').value.trim();
+        if (!user_answer) { alert('Please enter an answer.'); return; }
+      }
+
+      const res = await fetch('/api/answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: SESSION_ID, question_num: currentQ, answer: user_answer })
+      });
+      const data = await res.json();
+
+      const prevResult = answered[currentQ] ? answered[currentQ].result : null;
+      answered[currentQ] = { result: data.result, correct_answer: data.correct_answer, explanation: data.explanation, key_takeaway: data.key_takeaway, user_answer };
+
+      if (prevResult) {
+        stats[prevResult] = Math.max(0, stats[prevResult] - 1);
+      }
+      stats[data.result]++;
+
+      updateNavBtn(currentQ, data.result);
+      updateProgress();
+      showFeedback(answered[currentQ]);
+      document.getElementById('submitBtn').disabled = true;
+      document.getElementById('skipBtn').disabled = true;
+
+      // Disable inputs
+      document.querySelectorAll('input[name="answer"]').forEach(i => i.disabled = true);
+    }
+
+    async function skipQuestion() {
+      const res = await fetch('/api/answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: SESSION_ID, question_num: currentQ, skipped: true })
+      });
+      const data = await res.json();
+      const prevResult = answered[currentQ] ? answered[currentQ].result : null;
+      answered[currentQ] = { result: 'skipped', correct_answer: data.correct_answer, explanation: data.explanation, key_takeaway: data.key_takeaway, user_answer: null };
+      if (prevResult) stats[prevResult] = Math.max(0, stats[prevResult] - 1);
+      stats['skipped']++;
+      updateNavBtn(currentQ, 'skipped');
+      updateProgress();
+      showFeedback(answered[currentQ]);
+      document.getElementById('submitBtn').disabled = true;
+      document.getElementById('skipBtn').disabled = true;
+    }
+
+    function navigate(dir) {
+      const idx = QUESTIONS.indexOf(currentQ);
+      const next = QUESTIONS[idx + dir];
+      if (next !== undefined) loadQuestion(next);
+    }
+
+    function goTo(num) {
+      loadQuestion(num);
+    }
+
+    function updateNavBtn(num, result) {
+      const btn = document.getElementById(`nav-${num}`);
+      if (btn) {
+        // In exam mode, show neutral 'answered' for correct/incorrect
+        const cls = (EXAM_MODE === 'exam' && (result === 'correct' || result === 'incorrect'))
+          ? 'answered' : result;
+        btn.className = `nav-btn ${cls}`;
+      }
+    }
+
+    function updateProgress() {
+      const done = Object.keys(answered).length;
+      const pct = Math.round(done / TOTAL * 100);
+      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('progressText').textContent = `Question ${currentQ} of ${TOTAL}`;
+      if (EXAM_MODE === 'exam') {
+        document.getElementById('progressStats').innerHTML = `📝 ${done} answered`;
+      } else {
+        document.getElementById('progressStats').innerHTML = `✅ ${stats.correct} &nbsp; ❌ ${stats.incorrect} &nbsp; ⏭ ${stats.skipped}`;
+      }
+    }
+
+    async function finishExam() {
+      if (!confirm('Are you sure you want to finish? All unanswered questions will be marked as skipped.')) return;
+      clearInterval(timerInterval);
+
+      // Skip all unanswered
+      for (const num of QUESTIONS) {
+        if (!answered[num]) {
+          await fetch('/api/answer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: SESSION_ID, question_num: num, skipped: true })
+          });
+        }
+      }
+
+      const res = await fetch('/api/finish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: SESSION_ID })
+      });
+      const data = await res.json();
+      window.location.href = `/results/${SESSION_ID}`;
+    }
+
+    // Init
+    loadQuestion(QUESTIONS[0]);
+  </script>
+</body>
+</html>

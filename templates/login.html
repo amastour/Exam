@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terraform Exam – Login</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="auth-page">
+  <div class="auth-card">
+    <div class="logo">
+      <span class="logo-icon">🏗️</span>
+      <h1>Terraform Exam</h1>
+      <p>HashiCorp Certified – TA-004 Practice</p>
+    </div>
+
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="token">Access Token</label>
+        <input type="text" id="token" name="token" placeholder="Paste your token here…" autocomplete="off" required>
+      </div>
+      <div id="loginError" class="error-msg hidden"></div>
+      <button type="submit" class="btn btn-primary btn-full">Enter Exam Portal</button>
+    </form>
+
+    <p class="hint">Don't have a token? Contact your administrator.</p>
+  </div>
+
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const token = document.getElementById('token').value.trim();
+      const errEl = document.getElementById('loginError');
+      errEl.classList.add('hidden');
+
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        window.location.href = '/dashboard';
+      } else {
+        errEl.textContent = data.error || 'Invalid token';
+        errEl.classList.remove('hidden');
+      }
+    });
+  </script>
+</body>
+</html>
