@@ -1,7 +1,8 @@
 import json
+import os
 import secrets
 import datetime
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session
+from flask import Flask, request, jsonify, render_template, redirect, url_for, session, send_file
 from functools import wraps
 from models import get_db, init_db
 from questions import get_exam, get_question, list_exams, EXAMS, ALL_DOMAINS, ALL_OBJECTIVES
@@ -193,6 +194,19 @@ def admin_page():
     users = db.execute("SELECT * FROM users ORDER BY created_at DESC").fetchall()
     db.close()
     return render_template("admin.html", users=[dict(u) for u in users], user=request.current_user, exams=list_exams())
+
+
+@app.route("/admin/download_db")
+@require_admin
+def download_db():
+    db_path = os.path.join(os.path.dirname(__file__), "exam.db")
+    timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    return send_file(
+        db_path,
+        as_attachment=True,
+        download_name=f"exam_backup_{timestamp}.db",
+        mimetype="application/octet-stream",
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -389,6 +403,63 @@ def api_admin_stats():
         "total_questions": STATIC_QUESTION_COUNT + custom_q_count,
         "objectives_count": len(ALL_OBJECTIVES),
     })
+
+
+@app.route("/api/admin/all_exams")
+@require_admin
+def api_admin_all_exams():
+    all_exams = list_exams()
+    # Enrich each exam with source label for the frontend
+    result = []
+    for e in all_exams:
+        result.append({
+            "id": e["id"],
+            "title": e["title"],
+            "total": e["total"],
+            "exam_type": e.get("exam_type", "regular"),
+            "source": e.get("source", "file"),
+            "visible_to_users": e.get("visible_to_users", True if e.get("source") == "file" else False),
+        })
+    return jsonify(result)
+
+
+@app.route("/api/admin/leaderboard")
+@require_admin
+def api_admin_leaderboard():
+    exam_id = request.args.get("exam_id", type=int)
+    mode = request.args.get("mode", "").strip()
+
+    db = get_db()
+    where = ["s.status='finished'", "u.role='user'"]
+    params = []
+    if exam_id:
+        where.append("s.exam_id=?")
+        params.append(exam_id)
+    if mode:
+        where.append("s.mode=?")
+        params.append(mode)
+
+    where_sql = " AND ".join(where)
+    rows = db.execute(f"""
+        SELECT
+            u.id AS user_id,
+            u.username,
+            COUNT(s.id)                          AS total_finished,
+            MAX(CAST(s.score AS REAL) / s.total * 100) AS best_pct,
+            AVG(CAST(s.score AS REAL) / s.total * 100) AS avg_pct,
+            MAX(s.score)                         AS best_score,
+            MAX(s.total)                         AS best_total,
+            SUM(CASE WHEN CAST(s.score AS REAL) / s.total >= 0.7 THEN 1 ELSE 0 END) AS passed,
+            MAX(s.finished_at)                   AS last_exam
+        FROM exam_sessions s
+        JOIN users u ON u.id = s.user_id
+        WHERE {where_sql}
+        GROUP BY u.id
+        ORDER BY best_pct DESC, avg_pct DESC, total_finished DESC
+    """, params).fetchall()
+    db.close()
+
+    return jsonify([dict(r) for r in rows])
 
 
 @app.route("/api/admin/create_exam_token", methods=["POST"])

@@ -11,6 +11,7 @@
     <div class="nav-brand">🏗️ Terraform Exam – Admin</div>
     <div class="nav-actions">
       <span class="nav-user">🔑 {{ user.username }}</span>
+      <a href="/admin/download_db" class="btn btn-sm btn-outline" title="Download exam.db backup">⬇️ Download DB</a>
       <a href="/dashboard" class="btn btn-sm btn-outline">Dashboard</a>
       <button onclick="logout()" class="btn btn-sm btn-danger">Logout</button>
     </div>
@@ -107,6 +108,29 @@
         <div id="ceSuccess" class="token-box hidden" style="margin-top:8px">
           <p id="ceSuccessMsg"></p>
         </div>
+      </div>
+    </section>
+
+    <!-- All Exams List -->
+    <section class="section">
+      <h2>📋 All Exams</h2>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Title</th>
+              <th>Type</th>
+              <th>Source</th>
+              <th>Questions</th>
+              <th>Visible to Users</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="allExamsTbody">
+            <tr><td colspan="7" class="small-text" style="padding:16px">Loading…</td></tr>
+          </tbody>
+        </table>
       </div>
     </section>
 
@@ -307,6 +331,42 @@
       </div>
     </section>
 
+    <!-- Classement / Leaderboard -->
+    <section class="section">
+      <h2>🏆 Classement des Utilisateurs</h2>
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+        <label class="small-text">Filtrer par examen :</label>
+        <select id="lbExamFilter" class="input-field" style="min-width:200px" onchange="loadLeaderboard()">
+          <option value="">— Tous les examens —</option>
+        </select>
+        <label class="small-text" style="margin-left:8px">Mode :</label>
+        <select id="lbModeFilter" class="input-field" style="min-width:130px" onchange="loadLeaderboard()">
+          <option value="">Tous</option>
+          <option value="exam">Exam</option>
+          <option value="practice">Practice</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th style="width:50px">Rang</th>
+              <th>Utilisateur</th>
+              <th>Examens passés</th>
+              <th>Meilleur score</th>
+              <th>Meilleur %</th>
+              <th>Score moyen %</th>
+              <th>Réussite (≥70%)</th>
+              <th>Dernier examen</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboardTbody">
+            <tr><td colspan="8" class="small-text" style="padding:16px">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- All Results -->
     <section class="section">
       <h2>📊 All Results</h2>
@@ -334,6 +394,79 @@
   </div>
 
   <script>
+    async function loadAllExams() {
+      const res = await fetch('/api/admin/all_exams');
+      const exams = await res.json();
+      const tbody = document.getElementById('allExamsTbody');
+      if (!exams.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="small-text" style="padding:16px">No exams found.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = exams.map(e => {
+        const typeBadge = e.exam_type === 'objective'
+          ? '<span class="badge badge-admin">objective</span>'
+          : '<span class="badge badge-user">regular</span>';
+        const sourceBadge = e.source === 'file'
+          ? '<span class="badge" style="background:var(--text-muted);color:#fff">static</span>'
+          : '<span class="badge" style="background:var(--primary);color:#fff">custom</span>';
+        const visCell = e.source === 'file'
+          ? '<span class="small-text">always visible</span>'
+          : (e.visible_to_users
+              ? `<button class="btn btn-sm btn-success" onclick="toggleVisibility(${e.id})">👁 Visible</button>`
+              : `<button class="btn btn-sm btn-outline" onclick="toggleVisibility(${e.id})">🙈 Hidden</button>`);
+        const actions = [];
+        actions.push(`<a href="/exam/${e.id}" target="_blank" class="btn btn-sm btn-outline">▶ Preview</a>`);
+        if (e.source !== 'file') {
+          actions.push(`<button class="btn btn-sm btn-primary" onclick="openQuestionEditor(${e.id}, '${(e.title||'').replace(/'/g,"\\'")}', '${e.exam_type}')">✏️ Edit</button>`);
+          actions.push(`<button class="btn btn-sm btn-danger" onclick="deleteCustomExam(${e.id}, '${(e.title||'').replace(/'/g,"\\'")}')">🗑 Delete</button>`);
+        }
+        return `<tr>
+          <td>${e.id}</td>
+          <td><b>${e.title}</b></td>
+          <td>${typeBadge}</td>
+          <td>${sourceBadge}</td>
+          <td>${e.total}</td>
+          <td>${visCell}</td>
+          <td style="display:flex;gap:6px;flex-wrap:wrap">${actions.join('')}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function loadLeaderboard() {
+      const examId = document.getElementById('lbExamFilter').value;
+      const mode = document.getElementById('lbModeFilter').value;
+      const params = new URLSearchParams();
+      if (examId) params.set('exam_id', examId);
+      if (mode) params.set('mode', mode);
+      const res = await fetch('/api/admin/leaderboard?' + params.toString());
+      const rows = await res.json();
+      const tbody = document.getElementById('leaderboardTbody');
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="small-text" style="padding:16px">Aucun résultat.</td></tr>';
+        return;
+      }
+      const medals = ['🥇', '🥈', '🥉'];
+      tbody.innerHTML = rows.map((r, i) => {
+        const rank = medals[i] || `#${i + 1}`;
+        const bestPct = r.best_pct !== null ? r.best_pct.toFixed(1) : '–';
+        const avgPct  = r.avg_pct  !== null ? r.avg_pct.toFixed(1)  : '–';
+        const bestPctClass = r.best_pct >= 70 ? 'pass' : 'fail';
+        const passRate = r.total_finished > 0
+          ? `${r.passed}/${r.total_finished} (${Math.round(r.passed/r.total_finished*100)}%)`
+          : '–';
+        return `<tr>
+          <td style="text-align:center;font-size:1.2rem">${rank}</td>
+          <td><b>${r.username}</b></td>
+          <td style="text-align:center">${r.total_finished}</td>
+          <td style="text-align:center">${r.best_score !== null ? r.best_score + ' / ' + r.best_total : '–'}</td>
+          <td style="text-align:center"><span class="pct ${r.best_pct !== null ? bestPctClass : ''}">${bestPct}${r.best_pct !== null ? '%' : ''}</span></td>
+          <td style="text-align:center"><span class="pct ${r.avg_pct >= 70 ? 'pass' : 'fail'}">${avgPct}${r.avg_pct !== null ? '%' : ''}</span></td>
+          <td style="text-align:center">${passRate}</td>
+          <td class="small-text">${r.last_exam || '–'}</td>
+        </tr>`;
+      }).join('');
+    }
+
     async function loadStats() {
       const res = await fetch('/api/admin/stats');
       const data = await res.json();
@@ -524,6 +657,15 @@
     loadAllResults();
     loadDomains();
     loadCustomExams();
+    loadAllExams();
+    // Populate leaderboard exam filter then load
+    (async () => {
+      const res = await fetch('/api/admin/all_exams');
+      const exams = await res.json();
+      const sel = document.getElementById('lbExamFilter');
+      exams.forEach(e => sel.appendChild(new Option(`Exam #${e.id} – ${e.title}`, e.id)));
+      loadLeaderboard();
+    })();
 
     // ── Exam Type Toggle ────────────────────────────────────────────────
     function toggleExamType() {
@@ -620,12 +762,12 @@
     async function deleteCustomExam(id, title) {
       if (!confirm(`Delete exam "${title}" and all its questions?`)) return;
       const res = await fetch(`/api/admin/delete_custom_exam/${id}`, { method: 'DELETE' });
-      if (res.ok) { loadCustomExams(); loadStats(); }
+      if (res.ok) { loadCustomExams(); loadAllExams(); loadStats(); }
     }
 
     async function toggleVisibility(id) {
       const res = await fetch(`/api/admin/toggle_quiz_visibility/${id}`, { method: 'POST' });
-      if (res.ok) { loadCustomExams(); }
+      if (res.ok) { loadCustomExams(); loadAllExams(); }
     }
 
     // ── Question Editor ─────────────────────────────────────────────────
@@ -654,9 +796,24 @@
       document.getElementById('qeTFArea').classList.toggle('hidden', type !== 'true_false');
       document.getElementById('qeOpenArea').classList.toggle('hidden', type !== 'open');
       if (type === 'multiple_choice' || type === 'multi_select') {
-        if (document.getElementById('qeOptionsList').children.length === 0) {
+        const list = document.getElementById('qeOptionsList');
+        const isMulti = type === 'multi_select';
+        const inputType = isMulti ? 'checkbox' : 'radio';
+        // Rebuild existing option rows with correct input type
+        const existingRows = list.querySelectorAll('div');
+        if (existingRows.length === 0) {
           optionCount = 0;
           addOption(); addOption(); addOption(); addOption();
+        } else {
+          existingRows.forEach(row => {
+            const inp = row.querySelector('.opt-correct');
+            if (inp && inp.type !== inputType) {
+              const wasChecked = inp.checked;
+              inp.type = inputType;
+              inp.name = 'optCorrect';
+              inp.checked = wasChecked;
+            }
+          });
         }
       }
     }
@@ -666,13 +823,14 @@
       const letter = String.fromCharCode(65 + optionCount);
       optionCount++;
       const isMulti = document.getElementById('qeType').value === 'multi_select';
+      const inputType = isMulti ? 'checkbox' : 'radio';
       const div = document.createElement('div');
       div.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px';
       div.innerHTML = `
         <span style="min-width:20px;font-weight:700;color:var(--primary)">${letter}.</span>
         <input type="text" class="input-field option-text" placeholder="Option text…" style="flex:1">
         <label style="display:flex;align-items:center;gap:4px;font-size:.82rem;white-space:nowrap">
-          <input type="${isMulti?'checkbox':'radio'}" name="optCorrect" value="${letter}" class="opt-correct"> Correct
+          <input type="${inputType}" name="optCorrect" value="${letter}" class="opt-correct"> Correct
         </label>
         <button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">✕</button>
       `;
