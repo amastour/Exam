@@ -8,7 +8,21 @@ from models import get_db, init_db
 from questions import get_exam, get_question, list_exams, EXAMS, ALL_DOMAINS, ALL_OBJECTIVES
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
-app.secret_key = secrets.token_hex(32)
+
+# A4 — secret_key persistant (ne change pas au redémarrage)
+_key_file = os.path.join(os.path.dirname(__file__), ".secret_key")
+if os.path.exists(_key_file):
+    with open(_key_file) as _f:
+        app.secret_key = _f.read().strip()
+else:
+    _k = secrets.token_hex(32)
+    with open(_key_file, "w") as _f:
+        _f.write(_k)
+    app.secret_key = _k
+
+# A8 — cookies sécurisés
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Auth helpers
@@ -92,9 +106,36 @@ def exam_page(exam_id):
     if not exam:
         return "Exam not found", 404
     user = request.current_user
+
+    # Access control: regular users can only access
+    # (1) exams marked visible_to_users, OR
+    # (2) exams they already have an in-progress session for (started via token)
+    if user["role"] != "admin":
+        allowed = False
+        # Check if exam is visible
+        all_exams = list_exams()
+        for e in all_exams:
+            if e["id"] == exam_id and e.get("visible_to_users"):
+                allowed = True
+                break
+        # Check if they have an existing in-progress session (started via exam token)
+        if not allowed:
+            db = get_db()
+            existing_check = db.execute(
+                "SELECT id FROM exam_sessions WHERE user_id=? AND exam_id=? AND status='in_progress'",
+                (user["id"], exam_id)
+            ).fetchone()
+            db.close()
+            if existing_check:
+                allowed = True
+        if not allowed:
+            return redirect(url_for("dashboard"))
+
     mode = request.args.get("mode", "practice")  # 'practice' or 'exam'
+    if mode not in ("practice", "exam"):
+        mode = "practice"
     try:
-        duration = max(1, int(request.args.get("duration", 60)))
+        duration = min(max(5, int(request.args.get("duration", 60))), 300)
     except ValueError:
         duration = 60
 
@@ -199,6 +240,9 @@ def admin_page():
 @app.route("/admin/download_db")
 @require_admin
 def download_db():
+    # M3 — Log d'audit
+    print(f"[AUDIT] DB downloaded by '{request.current_user['username']}' "
+          f"from IP {request.remote_addr} at {datetime.datetime.utcnow().isoformat()}Z", flush=True)
     db_path = os.path.join(os.path.dirname(__file__), "exam.db")
     timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     return send_file(
@@ -213,8 +257,28 @@ def download_db():
 # API
 # ─────────────────────────────────────────────────────────────────────────────
 
+# C2 — Rate limiting login : max 10 tentatives / IP / 5 min
+_login_attempts: dict = {}  # {ip: [timestamp, ...]}
+_RATE_LIMIT_MAX = 10
+_RATE_LIMIT_WINDOW = 300  # secondes
+
+
+def _check_rate_limit(ip: str) -> bool:
+    """Retourne True si l'IP est autorisée, False si bloquée."""
+    now = datetime.datetime.utcnow().timestamp()
+    attempts = [t for t in _login_attempts.get(ip, []) if now - t < _RATE_LIMIT_WINDOW]
+    _login_attempts[ip] = attempts
+    if len(attempts) >= _RATE_LIMIT_MAX:
+        return False
+    _login_attempts[ip].append(now)
+    return True
+
+
 @app.route("/api/login", methods=["POST"])
 def api_login():
+    ip = request.remote_addr or "unknown"
+    if not _check_rate_limit(ip):
+        return jsonify({"error": "Too many attempts, retry in 5 minutes"}), 429
     data = request.json or {}
     token = data.get("token", "").strip()
     user = get_user_by_token(token)
@@ -233,6 +297,17 @@ def api_logout():
 @app.route("/api/question/<int:exam_id>/<int:q_num>")
 @require_token
 def api_question(exam_id, q_num):
+    user = request.current_user
+    # Regular users must have an active session for this exam
+    if user["role"] != "admin":
+        db = get_db()
+        sess = db.execute(
+            "SELECT id FROM exam_sessions WHERE user_id=? AND exam_id=? AND status='in_progress'",
+            (user["id"], exam_id)
+        ).fetchone()
+        db.close()
+        if not sess:
+            return jsonify({"error": "Access denied"}), 403
     q = get_question(exam_id, q_num)
     if not q:
         return jsonify({"error": "Not found"}), 404
@@ -261,6 +336,18 @@ def api_answer():
     if not sess:
         db.close()
         return jsonify({"error": "Session not found or already finished"}), 404
+
+    # M1 — Vérifier que le temps imparti n'est pas dépassé côté serveur
+    try:
+        start_dt = datetime.datetime.strptime(sess["started_at"], "%Y-%m-%d %H:%M:%S")
+        elapsed_s = (datetime.datetime.utcnow() - start_dt).total_seconds()
+        if elapsed_s > sess["duration_minutes"] * 60:
+            db.execute("UPDATE exam_sessions SET status='finished', finished_at=CURRENT_TIMESTAMP WHERE id=?", (session_id,))
+            db.commit()
+            db.close()
+            return jsonify({"error": "Time expired", "expired": True}), 403
+    except Exception:
+        pass  # si started_at mal formé, on laisse passer
 
     q = get_question(sess["exam_id"], q_num)
     if not q:
@@ -301,7 +388,13 @@ def api_answer():
     db.commit()
     db.close()
 
-    return jsonify({"result": result, "is_correct": bool(is_correct), "correct_answer": q["correct_answer"], "explanation": q.get("explanation", ""), "key_takeaway": q.get("key_takeaway", "")})
+    # C3 — Ne révéler correct_answer et explanation qu'en mode practice
+    resp = {"result": result, "is_correct": bool(is_correct)}
+    if sess["mode"] == "practice":
+        resp["correct_answer"] = q["correct_answer"]
+        resp["explanation"] = q.get("explanation", "")
+        resp["key_takeaway"] = q.get("key_takeaway", "")
+    return jsonify(resp)
 
 
 @app.route("/api/finish", methods=["POST"])
@@ -551,8 +644,8 @@ def api_redeem_exam_token():
         db.close()
         return jsonify({"error": "This token is assigned to a different user"}), 403
 
-    # Check already used by someone else
-    if et["used_by"] and et["used_by"] != user["id"]:
+    # C4 — Token à usage unique : bloqué dès qu'il a été utilisé (même user)
+    if et["used_by"]:
         db.close()
         return jsonify({"error": "This token has already been used"}), 403
 
@@ -788,4 +881,6 @@ def api_exam_questions(exam_id):
 
 if __name__ == "__main__":
     init_db()
-    app.run(host="0.0.0.0", debug=True, port=8080)
+    # M4 — debug=False en prod ; passer DEBUG=1 en var d'env pour le dev local
+    debug_mode = os.environ.get("DEBUG", "0") == "1"
+    app.run(host="0.0.0.0", debug=debug_mode, port=8080)
