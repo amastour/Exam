@@ -103,8 +103,8 @@
   </div>
 
   <script>
-    const EXAM_ID = {{ exam.id }};
-    const SESSION_ID = {{ session_id }};
+    const EXAM_ID = {{ exam.id | tojson }};
+    const SESSION_ID = {{ session_id | tojson }};
     const QUESTIONS = {{ exam.questions.keys() | list | tojson }};
     const TOTAL = QUESTIONS.length;
     const EXAM_MODE = {{ exam_mode | tojson }};  // 'practice' or 'exam'

@@ -82,17 +82,17 @@ def _build_objective_exam(db_row, db=None):
 
     # Check if there are linked questions (quiz_question_links)
     linked_questions = []
-    if db:
-        links = db.execute(
-            "SELECT * FROM quiz_question_links WHERE quiz_id=? ORDER BY position",
-            (db_row["id"],)
-        ).fetchall()
+    try:
+        from firestore_db import get_quiz_links
+        links = get_quiz_links(db_row["id"])
         for lnk in links:
             src = EXAMS.get(lnk["source_exam_id"])
             if src:
                 q = src["questions"].get(lnk["source_question_num"])
                 if q:
                     linked_questions.append(dict(q, num=lnk["position"], exam_id=db_row["id"]))
+    except Exception:
+        pass
 
     if linked_questions:
         questions = {q["num"]: q for q in linked_questions}
@@ -113,11 +113,9 @@ def _build_objective_exam(db_row, db=None):
     }
 
 
-def _build_regular_db_exam(db_row, db):
-    rows = db.execute(
-        "SELECT * FROM custom_questions WHERE exam_id=? ORDER BY question_num",
-        (db_row["id"],)
-    ).fetchall()
+def _build_regular_db_exam(db_row, db=None):
+    from firestore_db import get_custom_questions_by_exam
+    rows = get_custom_questions_by_exam(db_row["id"])
     questions = {}
     for r in rows:
         try:
@@ -153,19 +151,14 @@ def _build_regular_db_exam(db_row, db):
 
 
 def get_db_exam(exam_id):
-    from models import get_db
-    db = get_db()
-    row = db.execute("SELECT * FROM custom_exams WHERE id=? AND is_active=1", (exam_id,)).fetchone()
-    if not row:
-        db.close()
+    from firestore_db import get_custom_exam_by_id
+    row = get_custom_exam_by_id(exam_id)
+    if not row or not row.get("is_active"):
         return None
-    row = dict(row)
     if row["exam_type"] == "objective":
-        exam = _build_objective_exam(row, db)
+        return _build_objective_exam(row)
     else:
-        exam = _build_regular_db_exam(row, db)
-    db.close()
-    return exam
+        return _build_regular_db_exam(row)
 
 
 def get_exam(exam_id):
@@ -188,18 +181,14 @@ def list_exams():
         for e in EXAMS.values()
     ]
     try:
-        from models import get_db
-        db = get_db()
-        rows = db.execute("SELECT * FROM custom_exams WHERE is_active=1 ORDER BY created_at").fetchall()
+        from firestore_db import get_active_custom_exams, get_custom_questions_by_exam
+        rows = get_active_custom_exams()
         for row in rows:
-            row = dict(row)
             if row["exam_type"] == "objective":
-                exam = _build_objective_exam(row, db)
+                exam = _build_objective_exam(row)
                 total = len(exam["questions"])
             else:
-                total = db.execute(
-                    "SELECT COUNT(*) as cnt FROM custom_questions WHERE exam_id=?", (row["id"],)
-                ).fetchone()["cnt"]
+                total = len(get_custom_questions_by_exam(row["id"]))
             raw = row.get("filter_objectives") or ""
             objectives = [o.strip() for o in raw.split("|||") if o.strip()]
             result.append({
@@ -211,7 +200,6 @@ def list_exams():
                 "filter_objectives": objectives,
                 "visible_to_users": bool(row.get("visible_to_users", 0)),
             })
-        db.close()
     except Exception:
         pass
     return result

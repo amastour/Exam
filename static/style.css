@@ -272,3 +272,7 @@ textarea.input-field:focus { outline: none; border-color: var(--primary); }
 .token-display code { background: var(--bg3); padding: 8px 14px; border-radius: 6px; font-size: .85rem; word-break: break-all; flex: 1; }
 .token-row { display: flex; align-items: center; gap: 6px; }
 .token-short { font-size: .78rem; background: var(--bg3); padding: 3px 8px; border-radius: 4px; }
+
+/* ── Import Drop Zone ───────────────────────────────────────── */
+.import-drop-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 28px; text-align: center; cursor: pointer; color: var(--text-muted); font-size: .9rem; transition: border-color .2s, background .2s; }
+.import-drop-zone:hover, .import-drop-zone.drag-over { border-color: var(--primary); background: rgba(99,102,241,.06); color: var(--text); }

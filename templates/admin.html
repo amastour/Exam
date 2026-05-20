@@ -111,6 +111,34 @@
       </div>
     </section>
 
+    <!-- Import Quiz from JSON -->
+    <section class="section">
+      <h2>📥 Import Quiz from JSON</h2>
+      <div class="exam-builder-form">
+        <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
+          <div class="form-group" style="margin:0">
+            <label>Download empty skeleton</label>
+            <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+              <input type="number" id="skeletonN" class="input-field" value="10" min="1" max="200" style="width:80px" title="Number of questions">
+              <input type="text" id="skeletonTitle" class="input-field" placeholder="Quiz title" style="min-width:200px">
+              <button class="btn btn-outline" onclick="downloadSkeleton()">⬇️ Download Skeleton</button>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:18px">
+          <label class="form-group" style="display:block;margin-bottom:6px">Upload filled JSON</label>
+          <div id="importDropZone" class="import-drop-zone" onclick="document.getElementById('importFileInput').click()" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handleImportDrop(event)">
+            <span id="importDropLabel">📂 Click or drag & drop your JSON file here</span>
+          </div>
+          <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="handleImportFile(this.files[0])">
+        </div>
+        <div id="importError" class="error-msg hidden" style="margin-top:8px"></div>
+        <div id="importSuccess" class="token-box hidden" style="margin-top:8px">
+          <p id="importSuccessMsg"></p>
+        </div>
+      </div>
+    </section>
+
     <!-- All Exams List -->
     <section class="section">
       <h2>📋 All Exams</h2>
@@ -949,6 +977,46 @@
       if (!confirm('Delete this question?')) return;
       const res = await fetch(`/api/admin/delete_question/${id}`, { method: 'DELETE' });
       if (res.ok) { loadExamQuestions(); loadCustomExams(); }
+    }
+
+    // ── Skeleton download ────────────────────────────────────────────────────
+    function downloadSkeleton() {
+      const n = parseInt(document.getElementById('skeletonN').value) || 10;
+      const title = encodeURIComponent(document.getElementById('skeletonTitle').value.trim() || 'Mon Quiz');
+      window.location.href = `/api/admin/exam_skeleton?n=${n}&title=${title}`;
+    }
+
+    // ── Import quiz JSON ─────────────────────────────────────────────────────
+    function handleImportDrop(e) {
+      e.preventDefault();
+      document.getElementById('importDropZone').classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) handleImportFile(file);
+    }
+
+    async function handleImportFile(file) {
+      if (!file) return;
+      document.getElementById('importDropLabel').textContent = '⏳ Importing ' + file.name + '…';
+      document.getElementById('importError').classList.add('hidden');
+      document.getElementById('importSuccess').classList.add('hidden');
+
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/api/admin/import_exam', { method: 'POST', body: form });
+      const data = await res.json();
+      document.getElementById('importDropLabel').textContent = '📂 Click or drag & drop your JSON file here';
+      document.getElementById('importFileInput').value = '';
+
+      if (res.ok) {
+        document.getElementById('importSuccessMsg').textContent =
+          `✅ "${data.title}" imported — ${data.imported_count} questions (ID #${data.id})`;
+        document.getElementById('importSuccess').classList.remove('hidden');
+        loadCustomExams();
+        loadAllExams();
+      } else {
+        document.getElementById('importError').textContent = data.error || 'Import failed';
+        document.getElementById('importError').classList.remove('hidden');
+      }
     }
   </script>
 </body>
