@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quizzes – Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">🏗️ Admin – Quizzes</div>
+    <div class="nav-actions">
+      <a href="/admin" class="btn btn-sm btn-outline">📊 Analytics</a>
+      <a href="/admin/users" class="btn btn-sm btn-outline">👥 Users</a>
+      <a href="/admin/quizzes" class="btn btn-sm btn-primary">📚 Quizzes</a>
+      <a href="/dashboard" class="btn btn-sm btn-outline">Dashboard</a>
+      <button id="themeToggle" class="theme-toggle">🌙</button>
+      <button onclick="logout()" class="btn btn-sm btn-danger">Logout</button>
+    </div>
+  </nav>
+
+  <div class="container">
+
+    <!-- Custom Exam Builder -->
+    <section class="section">
+      <h2>🛠️ Create Custom Exam / Quiz</h2>
+      <div class="exam-builder-form">
+        <div class="form-group">
+          <label>Exam Title</label>
+          <input type="text" id="ceTitle" class="input-field" placeholder="e.g. Modules & State Quiz" style="min-width:300px">
+        </div>
+        <div class="form-group">
+          <label>Description (optional)</label>
+          <input type="text" id="ceDesc" class="input-field" placeholder="Short description…" style="min-width:300px">
+        </div>
+        <div class="form-group">
+          <label>Exam Type</label>
+          <div class="d-flex gap-3 align-items-center mt-1">
+            <label class="mode-label"><input type="radio" name="ceType" value="regular" checked onchange="toggleExamType()"> 📝 Regular (add questions manually)</label>
+            <label class="mode-label"><input type="radio" name="ceType" value="objective" onchange="toggleExamType()"> 📚 Objective Quiz (auto-pull by objective)</label>
+          </div>
+        </div>
+        <div id="ceDomainGroup" class="form-group hidden">
+          <label>Objectives / Domains <span class="small-text">(select one or more — Ctrl+Click)</span></label>
+          <select id="ceObjectives" class="input-field" multiple style="min-width:400px;height:160px"></select>
+          <p class="hint mt-1">Questions matching the selected objectives are automatically linked to this quiz.</p>
+        </div>
+        <button class="btn btn-primary" onclick="createCustomExam()">✅ Create</button>
+        <div id="ceError" class="error-msg hidden mt-2"></div>
+        <div id="ceSuccess" class="token-box hidden mt-2"><p id="ceSuccessMsg"></p></div>
+      </div>
+    </section>
+
+    <!-- Import Quiz from JSON -->
+    <section class="section">
+      <h2>📥 Import Quiz from JSON</h2>
+      <div class="exam-builder-form">
+        <div class="d-flex flex-wrap gap-3 align-items-end">
+          <div class="form-group" style="margin:0">
+            <label>Download empty skeleton</label>
+            <div class="d-flex gap-2 align-items-center mt-1">
+              <input type="number" id="skeletonN" class="input-field" value="10" min="1" max="200" style="width:80px">
+              <input type="text" id="skeletonTitle" class="input-field" placeholder="Quiz title" style="min-width:200px">
+              <button class="btn btn-outline" onclick="downloadSkeleton()">⬇️ Download Skeleton</button>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3">
+          <label class="form-group" style="display:block;margin-bottom:6px">Upload filled JSON</label>
+          <div id="importDropZone" class="import-drop-zone"
+               onclick="document.getElementById('importFileInput').click()"
+               ondragover="event.preventDefault();this.classList.add('drag-over')"
+               ondragleave="this.classList.remove('drag-over')"
+               ondrop="handleImportDrop(event)">
+            <span id="importDropLabel">📂 Click or drag & drop your JSON file here</span>
+          </div>
+          <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="handleImportFile(this.files[0])">
+        </div>
+        <div id="importError" class="error-msg hidden mt-2"></div>
+        <div id="importSuccess" class="token-box hidden mt-2"><p id="importSuccessMsg"></p></div>
+      </div>
+    </section>
+
+    <!-- All Exams Table -->
+    <section class="section">
+      <h2>📋 All Exams</h2>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>ID</th><th>Title</th><th>Type</th><th>Source</th><th>Questions</th><th>Visible</th><th>Actions</th></tr></thead>
+          <tbody id="allExamsTbody"><tr><td colspan="7" class="small-text" style="padding:16px">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Custom Exams Table -->
+    <section class="section">
+      <h2>📚 Custom Exams & Quizzes</h2>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>ID</th><th>Title</th><th>Type</th><th>Questions</th><th>Objectives</th><th>Visible</th><th>Created</th><th>Actions</th></tr></thead>
+          <tbody id="customExamsTbody"><tr><td colspan="8" class="small-text" style="padding:16px">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Question Editor (inline, shown on demand) -->
+    <div id="questionEditor" class="hidden">
+      <section class="section" style="border:2px solid var(--primary);border-radius:12px;padding:20px">
+        <h2>✏️ Questions: <span id="qeExamTitle" style="color:var(--primary)"></span></h2>
+
+        <!-- Form add/edit -->
+        <div class="question-editor-form">
+          <input type="hidden" id="qeEditingId"><!-- empty = add mode, filled = edit mode -->
+          <div id="qeEditBanner" class="token-box hidden mb-2" style="background:rgba(99,102,241,.1)">
+            ✏️ Editing question — <button class="btn btn-sm btn-outline" onclick="cancelEdit()">Cancel edit</button>
+          </div>
+          <div class="form-group">
+            <label>Question Text</label>
+            <textarea id="qeQuestion" rows="3" class="input-field" style="width:100%;min-height:80px;resize:vertical" placeholder="Question text…"></textarea>
+          </div>
+          <div class="d-flex flex-wrap gap-3">
+            <div class="form-group">
+              <label>Question Type</label>
+              <select id="qeType" class="input-field" onchange="renderOptionsEditor()">
+                <option value="multiple_choice">Multiple Choice</option>
+                <option value="multi_select">Multi-Select</option>
+                <option value="true_false">True / False</option>
+                <option value="open">Open / Text</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Domain</label>
+              <select id="qeDomain" class="input-field" style="min-width:260px"><option value="">— none —</option></select>
+            </div>
+            <div class="form-group">
+              <label>Objective</label>
+              <select id="qeObjective" class="input-field" style="min-width:300px"><option value="">— none —</option></select>
+            </div>
+          </div>
+          <div id="qeOptionsArea" class="form-group">
+            <label>Answer Options &amp; Correct Answer</label>
+            <div id="qeOptionsList"></div>
+            <button class="btn btn-sm btn-outline mt-1" onclick="addOption()">+ Add Option</button>
+          </div>
+          <div id="qeTFArea" class="form-group hidden">
+            <label>Correct Answer</label>
+            <div class="d-flex gap-3 mt-1">
+              <label class="mode-label"><input type="radio" name="qeTF" value="True"> True</label>
+              <label class="mode-label"><input type="radio" name="qeTF" value="False"> False</label>
+            </div>
+          </div>
+          <div id="qeOpenArea" class="form-group hidden">
+            <label>Correct Answer (text)</label>
+            <input type="text" id="qeOpenCorrect" class="input-field" placeholder="Expected answer…" style="min-width:300px">
+          </div>
+          <div class="form-group">
+            <label>Explanation</label>
+            <textarea id="qeExplanation" rows="2" class="input-field" style="width:100%;resize:vertical" placeholder="Why is this the correct answer?"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Key Takeaway</label>
+            <input type="text" id="qeKeyTakeaway" class="input-field" style="width:100%" placeholder="One-line summary…">
+          </div>
+          <div class="d-flex gap-2 align-items-center">
+            <button class="btn btn-primary" id="qeSaveBtn" onclick="saveQuestion()">💾 Save Question</button>
+            <button class="btn btn-outline" onclick="closeQuestionEditor()">✖ Close</button>
+            <div id="qeError" class="error-msg hidden" style="margin:0"></div>
+            <div id="qeSuccess" style="color:var(--success);font-size:.85rem" class="hidden">✅ Saved!</div>
+          </div>
+        </div>
+
+        <!-- Questions list for this exam -->
+        <div class="mt-4">
+          <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--text-muted)">📋 Questions (<span id="qeCount">0</span>)</h3>
+          <div id="qeQuestionsList" class="table-wrap"><p class="small-text">No questions yet.</p></div>
+        </div>
+      </section>
+    </div>
+
+  </div>
+
+  <script>
+    // ── Theme ────────────────────────────────────────────────────
+    const root = document.documentElement;
+    const themeBtn = document.getElementById('themeToggle');
+    const saved = localStorage.getItem('theme') || 'dark';
+    root.setAttribute('data-theme', saved);
+    themeBtn.textContent = saved === 'dark' ? '🌙' : '☀️';
+    themeBtn.addEventListener('click', () => {
+      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      themeBtn.textContent = next === 'dark' ? '🌙' : '☀️';
+    });
+
+    async function logout() {
+      await fetch('/api/logout', { method: 'POST' });
+      window.location.href = '/login';
+    }
+
+    // ── All Exams ────────────────────────────────────────────────
+    async function loadAllExams() {
+      const res = await fetch('/api/admin/all_exams');
+      const exams = await res.json();
+      const tbody = document.getElementById('allExamsTbody');
+      if (!exams.length) { tbody.innerHTML = '<tr><td colspan="7" class="small-text" style="padding:16px">No exams.</td></tr>'; return; }
+      tbody.innerHTML = exams.map(e => {
+        const typeBadge = e.exam_type === 'objective'
+          ? '<span class="badge badge-admin">objective</span>'
+          : '<span class="badge badge-user">regular</span>';
+        const sourceBadge = e.source === 'file'
+          ? '<span class="badge" style="background:var(--text-muted);color:#fff">static</span>'
+          : '<span class="badge" style="background:var(--primary);color:#fff">custom</span>';
+        const visCell = e.source === 'file'
+          ? '<span class="small-text">always</span>'
+          : (e.visible_to_users
+              ? `<button class="btn btn-sm btn-success" onclick="toggleVisibility(${e.id})">👁 Visible</button>`
+              : `<button class="btn btn-sm btn-outline" onclick="toggleVisibility(${e.id})">🙈 Hidden</button>`);
+        const actions = [`<a href="/exam/${e.id}" target="_blank" class="btn btn-sm btn-outline">▶</a>`];
+        if (e.source !== 'file') {
+          actions.push(`<button class="btn btn-sm btn-primary" onclick="openQuestionEditor(${e.id}, '${(e.title||'').replace(/'/g,"\\'")}', '${e.exam_type}')">✏️</button>`);
+          actions.push(`<button class="btn btn-sm btn-danger" onclick="deleteCustomExam(${e.id}, '${(e.title||'').replace(/'/g,"\\'")}')">🗑</button>`);
+        }
+        return `<tr>
+          <td>${e.id}</td><td><b>${e.title}</b></td><td>${typeBadge}</td><td>${sourceBadge}</td>
+          <td>${e.total}</td><td>${visCell}</td>
+          <td><div style="display:flex;gap:4px;flex-wrap:wrap">${actions.join('')}</div></td>
+        </tr>`;
+      }).join('');
+    }
+
+    // ── Custom Exams ─────────────────────────────────────────────
+    async function loadCustomExams() {
+      const res = await fetch('/api/admin/custom_exams');
+      const exams = await res.json();
+      const tbody = document.getElementById('customExamsTbody');
+      if (!exams.length) { tbody.innerHTML = '<tr><td colspan="8" class="small-text" style="padding:16px">No custom exams yet.</td></tr>'; return; }
+      tbody.innerHTML = exams.map(e => {
+        const objTags = (e.objectives_list || []).map(o =>
+          `<span class="badge badge-user" style="font-size:.7rem;margin:1px">${o}</span>`
+        ).join(' ') || '–';
+        const visBtn = e.visible_to_users
+          ? `<button class="btn btn-sm btn-success" onclick="toggleVisibility(${e.id})">👁 Visible</button>`
+          : `<button class="btn btn-sm btn-outline" onclick="toggleVisibility(${e.id})">🙈 Hidden</button>`;
+        return `<tr>
+          <td>${e.id}</td>
+          <td><b>${e.title}</b>${e.description?`<br><span class="small-text">${e.description}</span>`:''}</td>
+          <td><span class="badge ${e.exam_type==='objective'?'badge-admin':'badge-user'}">${e.exam_type}</span></td>
+          <td>${e.question_count}</td>
+          <td style="max-width:220px">${objTags}</td>
+          <td>${visBtn}</td>
+          <td class="small-text">${e.created_at}</td>
+          <td><div style="display:flex;gap:4px;flex-wrap:wrap">
+            <button class="btn btn-sm btn-primary" onclick="openQuestionEditor(${e.id}, '${e.title.replace(/'/g,"\\'")}', '${e.exam_type}')">✏️ Edit</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteCustomExam(${e.id}, '${e.title.replace(/'/g,"\\'")}')">🗑</button>
+          </div></td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function deleteCustomExam(id, title) {
+      if (!confirm(`Delete exam "${title}" and all its questions?`)) return;
+      const res = await fetch(`/api/admin/delete_custom_exam/${id}`, { method: 'DELETE' });
+      if (res.ok) { loadCustomExams(); loadAllExams(); }
+    }
+
+    async function toggleVisibility(id) {
+      const res = await fetch(`/api/admin/toggle_quiz_visibility/${id}`, { method: 'POST' });
+      if (res.ok) { loadCustomExams(); loadAllExams(); }
+    }
+
+    // ── Exam Type Toggle ─────────────────────────────────────────
+    function toggleExamType() {
+      const type = document.querySelector('input[name="ceType"]:checked').value;
+      document.getElementById('ceDomainGroup').classList.toggle('hidden', type !== 'objective');
+    }
+
+    async function loadDomains() {
+      const res = await fetch('/api/admin/domains');
+      const data = await res.json();
+      const ceSel = document.getElementById('ceObjectives');
+      const qeSel = document.getElementById('qeDomain');
+      const qeObjSel = document.getElementById('qeObjective');
+      const grpD = document.createElement('optgroup'); grpD.label = '── Domains ──';
+      data.domains.forEach(d => { grpD.appendChild(new Option(d, d)); qeSel.appendChild(new Option(d, d)); });
+      ceSel.appendChild(grpD);
+      const grpO = document.createElement('optgroup'); grpO.label = '── Objectives ──';
+      data.objectives.forEach(o => { grpO.appendChild(new Option(o, o)); qeObjSel.appendChild(new Option(o, o)); });
+      ceSel.appendChild(grpO);
+    }
+
+    async function createCustomExam() {
+      const title = document.getElementById('ceTitle').value.trim();
+      const desc = document.getElementById('ceDesc').value.trim();
+      const exam_type = document.querySelector('input[name="ceType"]:checked').value;
+      const selectedOpts = [...document.getElementById('ceObjectives').selectedOptions].map(o => o.value);
+      const errEl = document.getElementById('ceError');
+      const sucEl = document.getElementById('ceSuccess');
+      errEl.classList.add('hidden'); sucEl.classList.add('hidden');
+      if (!title) { errEl.textContent = 'Title is required'; errEl.classList.remove('hidden'); return; }
+      const res = await fetch('/api/admin/create_custom_exam', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, description: desc, exam_type, objectives: selectedOpts })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        document.getElementById('ceSuccessMsg').textContent =
+          `✅ "${data.title}" created (ID ${data.id})${exam_type==='objective'?' — questions auto-linked':' — add questions using ✏️ Edit'}`;
+        sucEl.classList.remove('hidden');
+        document.getElementById('ceTitle').value = '';
+        document.getElementById('ceDesc').value = '';
+        loadCustomExams(); loadAllExams();
+      } else {
+        errEl.textContent = data.error || 'Error';
+        errEl.classList.remove('hidden');
+      }
+    }
+
+    // ── Skeleton & Import ────────────────────────────────────────
+    function downloadSkeleton() {
+      const n = parseInt(document.getElementById('skeletonN').value) || 10;
+      const title = encodeURIComponent(document.getElementById('skeletonTitle').value.trim() || 'Mon Quiz');
+      window.location.href = `/api/admin/exam_skeleton?n=${n}&title=${title}`;
+    }
+
+    function handleImportDrop(e) {
+      e.preventDefault();
+      document.getElementById('importDropZone').classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) handleImportFile(file);
+    }
+
+    async function handleImportFile(file) {
+      if (!file) return;
+      document.getElementById('importDropLabel').textContent = '⏳ Importing ' + file.name + '…';
+      document.getElementById('importError').classList.add('hidden');
+      document.getElementById('importSuccess').classList.add('hidden');
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/api/admin/import_exam', { method: 'POST', body: form });
+      const data = await res.json();
+      document.getElementById('importDropLabel').textContent = '📂 Click or drag & drop your JSON file here';
+      document.getElementById('importFileInput').value = '';
+      if (res.ok) {
+        document.getElementById('importSuccessMsg').textContent = `✅ "${data.title}" imported — ${data.imported_count} questions (ID #${data.id})`;
+        document.getElementById('importSuccess').classList.remove('hidden');
+        loadCustomExams(); loadAllExams();
+      } else {
+        document.getElementById('importError').textContent = data.error || 'Import failed';
+        document.getElementById('importError').classList.remove('hidden');
+      }
+    }
+
+    // ── Question Editor ──────────────────────────────────────────
+    let currentEditorExamId = null;
+    let currentEditorExamType = 'regular';
+    let optionCount = 0;
+
+    function openQuestionEditor(examId, title, examType) {
+      currentEditorExamId = examId;
+      currentEditorExamType = examType || 'regular';
+      document.getElementById('qeExamTitle').textContent = title;
+      document.getElementById('questionEditor').classList.remove('hidden');
+      document.getElementById('questionEditor').scrollIntoView({ behavior: 'smooth' });
+      cancelEdit();
+      loadExamQuestions();
+    }
+
+    function closeQuestionEditor() {
+      document.getElementById('questionEditor').classList.add('hidden');
+      currentEditorExamId = null;
+    }
+
+    function cancelEdit() {
+      document.getElementById('qeEditingId').value = '';
+      document.getElementById('qeEditBanner').classList.add('hidden');
+      document.getElementById('qeSaveBtn').textContent = '💾 Save Question';
+      // Reset form fields
+      document.getElementById('qeQuestion').value = '';
+      document.getElementById('qeExplanation').value = '';
+      document.getElementById('qeKeyTakeaway').value = '';
+      document.getElementById('qeOptionsList').innerHTML = '';
+      document.getElementById('qeOpenCorrect').value = '';
+      document.getElementById('qeType').value = 'multiple_choice';
+      document.getElementById('qeDomain').value = '';
+      document.getElementById('qeObjective').value = '';
+      optionCount = 0;
+      renderOptionsEditor();
+    }
+
+    async function startEditQuestion(qId) {
+      const res = await fetch(`/api/admin/question/${qId}`);
+      if (!res.ok) { alert('Failed to load question'); return; }
+      const q = await res.json();
+
+      document.getElementById('qeEditingId').value = qId;
+      document.getElementById('qeEditBanner').classList.remove('hidden');
+      document.getElementById('qeSaveBtn').textContent = '💾 Update Question';
+
+      document.getElementById('qeQuestion').value = q.question || '';
+      document.getElementById('qeExplanation').value = q.explanation || '';
+      document.getElementById('qeKeyTakeaway').value = q.key_takeaway || '';
+      document.getElementById('qeType').value = q.type || 'multiple_choice';
+
+      // Set domain/objective after options are rendered
+      renderOptionsEditor();
+
+      // Pre-fill options
+      if (q.type === 'true_false') {
+        const tfVal = Array.isArray(q.correct_answer) ? q.correct_answer[0] : q.correct_answer;
+        const tfInput = document.querySelector(`input[name="qeTF"][value="${tfVal}"]`);
+        if (tfInput) tfInput.checked = true;
+      } else if (q.type === 'open') {
+        const ca = Array.isArray(q.correct_answer) ? q.correct_answer[0] : q.correct_answer;
+        document.getElementById('qeOpenCorrect').value = ca || '';
+      } else {
+        // Rebuild option rows from all_options + correct_answer
+        let opts = {};
+        try { opts = typeof q.all_options === 'string' ? JSON.parse(q.all_options) : (q.all_options || {}); } catch(e) {}
+        let correctList = [];
+        try {
+          correctList = typeof q.correct_answer === 'string'
+            ? JSON.parse(q.correct_answer)
+            : (q.correct_answer || []);
+          if (!Array.isArray(correctList)) correctList = [correctList];
+        } catch(e) { correctList = [q.correct_answer]; }
+
+        document.getElementById('qeOptionsList').innerHTML = '';
+        optionCount = 0;
+        const isMulti = q.type === 'multi_select';
+        Object.entries(opts).forEach(([letter, text]) => {
+          const isCorrect = correctList.map(x => String(x).toLowerCase()).includes(text.toLowerCase());
+          const div = document.createElement('div');
+          div.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px';
+          div.innerHTML = `
+            <span style="min-width:20px;font-weight:700;color:var(--primary)">${letter}.</span>
+            <input type="text" class="input-field option-text" value="${text.replace(/"/g,'&quot;')}" style="flex:1">
+            <label style="display:flex;align-items:center;gap:4px;font-size:.82rem;white-space:nowrap">
+              <input type="${isMulti?'checkbox':'radio'}" name="optCorrect" value="${letter}" class="opt-correct" ${isCorrect?'checked':''}> Correct
+            </label>
+            <button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">✕</button>`;
+          document.getElementById('qeOptionsList').appendChild(div);
+          optionCount++;
+        });
+      }
+
+      // Set domain/objective selects
+      const domSel = document.getElementById('qeDomain');
+      const objSel = document.getElementById('qeObjective');
+      if (q.domain) for (const opt of domSel.options) if (opt.value === q.domain) { opt.selected = true; break; }
+      if (q.objective) for (const opt of objSel.options) if (opt.value === q.objective) { opt.selected = true; break; }
+
+      document.getElementById('questionEditor').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function renderOptionsEditor() {
+      const type = document.getElementById('qeType').value;
+      document.getElementById('qeOptionsArea').classList.toggle('hidden', type === 'true_false' || type === 'open');
+      document.getElementById('qeTFArea').classList.toggle('hidden', type !== 'true_false');
+      document.getElementById('qeOpenArea').classList.toggle('hidden', type !== 'open');
+      if ((type === 'multiple_choice' || type === 'multi_select') && document.getElementById('qeOptionsList').children.length === 0) {
+        optionCount = 0;
+        addOption(); addOption(); addOption(); addOption();
+      }
+    }
+
+    function addOption() {
+      const list = document.getElementById('qeOptionsList');
+      const letter = String.fromCharCode(65 + optionCount++);
+      const isMulti = document.getElementById('qeType').value === 'multi_select';
+      const div = document.createElement('div');
+      div.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px';
+      div.innerHTML = `
+        <span style="min-width:20px;font-weight:700;color:var(--primary)">${letter}.</span>
+        <input type="text" class="input-field option-text" placeholder="Option text…" style="flex:1">
+        <label style="display:flex;align-items:center;gap:4px;font-size:.82rem;white-space:nowrap">
+          <input type="${isMulti?'checkbox':'radio'}" name="optCorrect" value="${letter}" class="opt-correct"> Correct
+        </label>
+        <button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">✕</button>`;
+      list.appendChild(div);
+    }
+
+    async function saveQuestion() {
+      const errEl = document.getElementById('qeError');
+      const sucEl = document.getElementById('qeSuccess');
+      errEl.classList.add('hidden'); sucEl.classList.add('hidden');
+
+      const editingId = document.getElementById('qeEditingId').value;
+      const type = document.getElementById('qeType').value;
+      const questionText = document.getElementById('qeQuestion').value.trim();
+      const domain = document.getElementById('qeDomain').value;
+      const objective = document.getElementById('qeObjective').value;
+      const explanation = document.getElementById('qeExplanation').value.trim();
+      const keyTakeaway = document.getElementById('qeKeyTakeaway').value.trim();
+
+      if (!questionText) { errEl.textContent = 'Question text required'; errEl.classList.remove('hidden'); return; }
+
+      let correct_answer, all_options = {};
+      if (type === 'true_false') {
+        const sel = document.querySelector('input[name="qeTF"]:checked');
+        if (!sel) { errEl.textContent = 'Select correct answer'; errEl.classList.remove('hidden'); return; }
+        correct_answer = sel.value;
+      } else if (type === 'open') {
+        correct_answer = document.getElementById('qeOpenCorrect').value.trim();
+        if (!correct_answer) { errEl.textContent = 'Correct answer required'; errEl.classList.remove('hidden'); return; }
+      } else {
+        const rows = document.querySelectorAll('#qeOptionsList > div');
+        rows.forEach((row, i) => {
+          const text = row.querySelector('.option-text').value.trim();
+          if (text) all_options[String.fromCharCode(65 + i)] = text;
+        });
+        const checked = [...document.querySelectorAll('.opt-correct:checked')].map(c => c.value);
+        if (!checked.length) { errEl.textContent = 'Mark at least one correct option'; errEl.classList.remove('hidden'); return; }
+        const correctTexts = checked.map(l => all_options[l]).filter(Boolean);
+        correct_answer = type === 'multi_select' ? correctTexts : correctTexts[0];
+      }
+
+      const payload = { question: questionText, type, correct_answer, all_options, domain, objective, explanation, key_takeaway: keyTakeaway };
+
+      let res;
+      if (editingId) {
+        // UPDATE
+        res = await fetch(`/api/admin/update_question/${editingId}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        // CREATE
+        res = await fetch('/api/admin/add_question', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...payload, exam_id: currentEditorExamId })
+        });
+      }
+
+      const data = await res.json();
+      if (res.ok) {
+        sucEl.classList.remove('hidden');
+        setTimeout(() => sucEl.classList.add('hidden'), 2000);
+        cancelEdit();
+        loadExamQuestions();
+        loadCustomExams();
+      } else {
+        errEl.textContent = data.error || 'Error';
+        errEl.classList.remove('hidden');
+      }
+    }
+
+    async function loadExamQuestions() {
+      if (!currentEditorExamId) return;
+      const container = document.getElementById('qeQuestionsList');
+
+      if (currentEditorExamType === 'objective') {
+        const res = await fetch(`/api/admin/quiz_links/${currentEditorExamId}`);
+        const links = await res.json();
+        document.getElementById('qeCount').textContent = links.length;
+        if (!links.length) { container.innerHTML = '<p class="small-text">No linked questions yet.</p>'; return; }
+        container.innerHTML = `<table class="table"><thead><tr><th>Pos</th><th>Source Exam</th><th>Q#</th><th>Action</th></tr></thead>
+          <tbody>${links.map(l => `<tr>
+            <td>${l.position}</td><td>Exam #${l.source_exam_id}</td><td>Q${l.source_question_num}</td>
+            <td><button class="btn btn-sm btn-danger" onclick="removeLink(${l.id})">🗑</button></td>
+          </tr>`).join('')}</tbody></table>`;
+      } else {
+        const res = await fetch(`/api/admin/exam_questions/${currentEditorExamId}`);
+        const qs = await res.json();
+        document.getElementById('qeCount').textContent = qs.length;
+        if (!qs.length) { container.innerHTML = '<p class="small-text">No questions yet.</p>'; return; }
+        container.innerHTML = `<table class="table"><thead><tr><th>#</th><th>Question</th><th>Type</th><th>Domain</th><th>Actions</th></tr></thead>
+          <tbody>${qs.map(q => `<tr>
+            <td>${q.question_num}</td>
+            <td class="small-text">${q.question.slice(0,80)}${q.question.length>80?'…':''}</td>
+            <td class="small-text">${q.type}</td>
+            <td class="small-text">${q.domain||'–'}</td>
+            <td><div style="display:flex;gap:4px">
+              <button class="btn btn-sm btn-primary" onclick="startEditQuestion('${q.id}')">✏️</button>
+              <button class="btn btn-sm btn-danger" onclick="deleteQuestion('${q.id}')">🗑</button>
+            </div></td>
+          </tr>`).join('')}</tbody></table>`;
+      }
+    }
+
+    async function removeLink(id) {
+      if (!confirm('Remove this question link?')) return;
+      const res = await fetch(`/api/admin/remove_quiz_link/${id}`, { method: 'DELETE' });
+      if (res.ok) { loadExamQuestions(); loadCustomExams(); }
+    }
+
+    async function deleteQuestion(id) {
+      if (!confirm('Delete this question?')) return;
+      const res = await fetch(`/api/admin/delete_question/${id}`, { method: 'DELETE' });
+      if (res.ok) { loadExamQuestions(); loadCustomExams(); }
+    }
+
+    // ── Init ─────────────────────────────────────────────────────
+    loadDomains();
+    loadCustomExams();
+    loadAllExams();
+  </script>
+</body>
+</html>

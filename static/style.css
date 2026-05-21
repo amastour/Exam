@@ -74,10 +74,16 @@ a { color: var(--primary); text-decoration: none; }
 
 /* ── Table ─────────────────────────────────────────────────── */
 .table-wrap { overflow-x: auto; }
-.table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-.table th { background: var(--bg3); padding: 10px 14px; text-align: left; color: var(--text-muted); font-size: .8rem; text-transform: uppercase; border-bottom: 1px solid var(--border); }
-.table td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-.table tr:hover td { background: var(--bg2); }
+.table { width: 100%; border-collapse: collapse; font-size: .9rem;
+  --bs-table-bg: transparent;
+  --bs-table-color: var(--text);
+  --bs-table-border-color: var(--border);
+  --bs-table-striped-bg: transparent;
+  --bs-table-hover-bg: var(--bg3);
+  color: var(--text); }
+.table th { background: var(--bg3); padding: 10px 14px; text-align: left; color: var(--text-muted); font-size: .8rem; text-transform: uppercase; border-bottom: 1px solid var(--border); border-color: var(--border); }
+.table td { padding: 12px 14px; border-bottom: 1px solid var(--border); border-color: var(--border); vertical-align: middle; background: var(--bg); color: var(--text); }
+.table tr:hover td { background: var(--bg3); }
 .pct { font-weight: 700; }
 .pct.pass { color: var(--success); }
 .pct.fail { color: var(--danger); }
@@ -276,3 +282,54 @@ textarea.input-field:focus { outline: none; border-color: var(--primary); }
 /* ── Import Drop Zone ───────────────────────────────────────── */
 .import-drop-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 28px; text-align: center; cursor: pointer; color: var(--text-muted); font-size: .9rem; transition: border-color .2s, background .2s; }
 .import-drop-zone:hover, .import-drop-zone.drag-over { border-color: var(--primary); background: rgba(99,102,241,.06); color: var(--text); }
+
+/* ── Light Theme ────────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg: #f1f5f9;
+  --bg2: #ffffff;
+  --bg3: #e8edf5;
+  --border: #cbd5e1;
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --shadow: 0 4px 24px rgba(0,0,0,.10);
+}
+[data-theme="light"] body { background: var(--bg); color: var(--text); }
+[data-theme="light"] .navbar { background: var(--bg2); }
+[data-theme="light"] .option-label:hover { background: rgba(124,92,252,.06); }
+[data-theme="light"] .table td { background: var(--bg); color: var(--text); }
+[data-theme="light"] .table th { background: var(--bg3); color: var(--text-muted); }
+[data-theme="light"] .table tr:hover td { background: var(--bg3); }
+
+/* ── Theme Toggle Button ────────────────────────────────────── */
+.theme-toggle { background: transparent; border: 1px solid var(--border); color: var(--text-muted); border-radius: 99px; padding: 4px 10px; cursor: pointer; font-size: .85rem; transition: all .15s; }
+.theme-toggle:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ── Responsive — 768px ─────────────────────────────────────── */
+@media (max-width: 768px) {
+  .navbar { padding: 10px 14px; flex-wrap: wrap; gap: 8px; }
+  .nav-actions { gap: 6px; flex-wrap: wrap; }
+  .nav-brand { font-size: .95rem; }
+  .auth-card { padding: 28px 18px; margin: 16px; }
+  .input-field { min-width: 0; width: 100%; }
+  .create-user-form { flex-direction: column; }
+  .exam-token-form { flex-direction: column; }
+  .score-card { flex-direction: column; padding: 20px; gap: 16px; }
+  .score-circle { min-width: unset; }
+  .q-actions { flex-wrap: wrap; }
+  .feedback-nav { flex-wrap: wrap; }
+  .question-card { padding: 16px; }
+  body { padding-bottom: 80px; }
+  .exam-builder-form { padding: 14px; }
+  .finish-bar { padding: 10px 16px; }
+  .result-actions { padding: 16px 0 64px; }
+}
+
+/* ── Responsive — 480px ─────────────────────────────────────── */
+@media (max-width: 480px) {
+  .score-num { font-size: 2.2rem; }
+  .nav-user { display: none; }
+  .exam-progress-bar { padding: 8px 12px; }
+  .nav-grid { grid-template-columns: repeat(8, 1fr); }
+  .admin-stats { grid-template-columns: repeat(2, 1fr); }
+  .objectives-grid { grid-template-columns: 1fr; }
+}

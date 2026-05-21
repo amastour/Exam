@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard – Terraform Exam</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -14,6 +15,7 @@
       {% if user.role == 'admin' %}
         <a href="/admin" class="btn btn-sm btn-outline">Admin Panel</a>
       {% endif %}
+      <button id="themeToggle" class="theme-toggle">🌙</button>
       <button onclick="logout()" class="btn btn-sm btn-danger">Logout</button>
     </div>
   </nav>
@@ -22,18 +24,22 @@
     <!-- Exam Token Redeem -->
     <section class="section">
       <h2>🎟️ Enter Exam Token</h2>
-      <div class="create-user-form">
-        <input type="text" id="examTokenInput" class="input-field" placeholder="Paste your exam token (et-…)">
+      <div class="d-flex flex-wrap gap-2">
+        <input type="text" id="examTokenInput" class="input-field flex-grow-1" placeholder="Paste your exam token (et-…)">
         <button class="btn btn-primary" onclick="redeemToken()">▶ Start Exam</button>
       </div>
-      <div id="tokenError" class="error-msg hidden"></div>
+      <div id="tokenError" class="error-msg hidden mt-2"></div>
       <p class="hint">Your admin will provide you a token that starts an exam with the right settings.</p>
     </section>
 
-    {% if user.role != 'admin' and exams %}
-    <!-- Visible quizzes for regular users -->
+    {% if exams %}
+    <!-- Exam grid -->
     <section class="section">
-      <h2>📚 Available Quizzes</h2>
+      {% if user.role == 'admin' %}
+        <h2>📋 All Exams <span class="small-text" style="font-weight:400">(admin view)</span></h2>
+      {% else %}
+        <h2>📚 Available Quizzes</h2>
+      {% endif %}
       <div class="exam-grid">
         {% for exam in exams %}
         <div class="exam-card">
@@ -44,43 +50,12 @@
             </span>
             <span class="exam-count">{{ exam.total }} questions</span>
           </div>
-          <h3>{{ exam.title }}</h3>
-          <div class="exam-start-options">
-            <div class="exam-mode-row">
-              <label class="mode-label"><input type="radio" name="mode-{{ exam.id }}" value="practice" checked> Practice</label>
-              <label class="mode-label"><input type="radio" name="mode-{{ exam.id }}" value="exam"> Exam</label>
-              <span class="mode-sep">|</span>
-              <input type="number" id="dur-{{ exam.id }}" class="dur-input" value="60" min="5" max="300" title="Duration (minutes)">
-              <span class="dur-unit">min</span>
-            </div>
-          </div>
-          <div class="exam-card-actions">
-            <button onclick="startExam({{ exam.id }})" class="btn btn-primary">Start / Continue</button>
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-    </section>
-    {% endif %}
-
-    {% if user.role == 'admin' %}
-    <!-- Exams (admin only) -->
-    <section class="section">
-      <h2>📋 All Exams <span class="small-text" style="font-weight:400">(admin view)</span></h2>
-      <div class="exam-grid">
-        {% for exam in exams %}
-        <div class="exam-card">
-          <div class="exam-card-header">
-            <span class="exam-badge">
-              {% if exam.exam_type == 'objective' %}📚{% else %}📝{% endif %}
-              #{{ exam.id }}
-            </span>
-            <span class="exam-count">{{ exam.total }} questions</span>
-          </div>
-          {% if exam.exam_type == 'objective' %}
-            <span class="badge badge-admin" style="font-size:.72rem;margin-bottom:8px;display:inline-block">Objective Quiz</span>
-          {% elif exam.source == 'db' %}
-            <span class="badge badge-user" style="font-size:.72rem;margin-bottom:8px;display:inline-block">Custom</span>
+          {% if user.role == 'admin' %}
+            {% if exam.exam_type == 'objective' %}
+              <span class="badge badge-admin" style="font-size:.72rem;margin-bottom:8px;display:inline-block">Objective Quiz</span>
+            {% elif exam.source == 'db' %}
+              <span class="badge badge-user" style="font-size:.72rem;margin-bottom:8px;display:inline-block">Custom</span>
+            {% endif %}
           {% endif %}
           <h3>{{ exam.title }}</h3>
           <div class="exam-start-options">
@@ -113,7 +88,7 @@
               <th>Status</th>
               <th>Score</th>
               <th>Pct</th>
-              <th>Started</th>
+              <th class="d-none d-md-table-cell">Started</th>
               <th>Action</th>
             </tr>
           </thead>
@@ -133,7 +108,7 @@
                   <span class="pct {% if pct >= 70 %}pass{% else %}fail{% endif %}">{{ pct }}%</span>
                 {% else %}–{% endif %}
               </td>
-              <td class="small-text">{{ s.started_at }}</td>
+              <td class="small-text d-none d-md-table-cell">{{ s.started_at }}</td>
               <td>
                 {% if s.status == 'finished' %}
                   <a href="/results/{{ s.id }}" class="btn btn-sm btn-outline">View Results</a>
@@ -155,6 +130,18 @@
   </div>
 
   <script>
+    const root = document.documentElement;
+    const btn = document.getElementById('themeToggle');
+    const saved = localStorage.getItem('theme') || 'dark';
+    root.setAttribute('data-theme', saved);
+    btn.textContent = saved === 'dark' ? '🌙' : '☀️';
+    btn.addEventListener('click', () => {
+      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      btn.textContent = next === 'dark' ? '🌙' : '☀️';
+    });
+
     async function logout() {
       await fetch('/api/logout', { method: 'POST' });
       window.location.href = '/login';

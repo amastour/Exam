@@ -2,7 +2,7 @@
 
 A self-hosted web application to practise for the **HashiCorp Certified Terraform Associate (TA-004)** exam.  
 Users log in with a token, take timed exams in **Practice** or **Exam** mode, and see detailed results broken down by objective domain.  
-Admins manage users, generate exam tokens, and monitor every candidate's progress.
+Admins manage users, generate exam tokens, build custom quizzes, and monitor every candidate's progress across a three-page admin panel.
 
 ---
 
@@ -12,7 +12,7 @@ Admins manage users, generate exam tokens, and monitor every candidate's progres
 2. [Project Structure](#project-structure)
 3. [Quick Start](#quick-start)
 4. [Configuration](#configuration)
-5. [Database Schema](#database-schema)
+5. [Database (Firestore)](#database-firestore)
 6. [API Reference](#api-reference)
 7. [Exam Modes](#exam-modes)
 8. [Timer](#timer)
@@ -27,7 +27,9 @@ Admins manage users, generate exam tokens, and monitor every candidate's progres
 | Feature | Details |
 |---|---|
 | Token-based auth | Each user gets a unique hex token — no passwords |
-| Two exams | Exam #2 and Exam #3 (57 questions each) |
+| Built-in exams | Exam #2 and Exam #3 (57 questions each, loaded from Python modules) |
+| Custom exams | Admin builds custom exams question-by-question or via JSON import |
+| Edit questions | Admin can edit any custom question inline in the quiz builder |
 | Practice mode | Immediate feedback after each answer (correct/incorrect + explanation) |
 | Exam mode | No feedback until the exam is finished |
 | Countdown timer | Configurable per session (default 60 min) — auto-submits on expiry |
@@ -35,7 +37,10 @@ Admins manage users, generate exam tokens, and monitor every candidate's progres
 | Per-user history | Every session (in-progress and finished) is saved per user |
 | Results & metrics | Score card, pass/fail (≥70%), performance breakdown by objective domain |
 | Question review | Filterable review of all questions with correct answers and explanations |
-| Admin panel | Create/delete users, generate exam tokens, view all results |
+| Leaderboard | Top performers ranked by average score across all sessions |
+| Three-page admin | Separate pages for analytics, user management and quiz management |
+| Dark / Light theme | Bootstrap 5.3.3 + CSS variable theming, persisted in `localStorage` |
+| Cloud backend | Google Firestore — no local database file required |
 
 ---
 
@@ -43,43 +48,65 @@ Admins manage users, generate exam tokens, and monitor every candidate's progres
 
 ```
 terraform_exam/
-├── exam2_questions.py          # 57 questions – Exam #2
-├── exam3_questions.py          # 57 questions – Exam #3
-├── README.md                   # This file
+├── credentials.json                # Google service-account key (do NOT commit)
+├── exam2_questions.py              # 57 questions – Exam #2
+├── exam3_questions.py              # 57 questions – Exam #3
 └── app/
-    ├── app.py                  # Flask application & all routes
-    ├── models.py               # SQLite schema + DB helpers
-    ├── questions.py            # Question loader & normaliser
-    ├── requirements.txt        # Python dependencies
-    ├── exam.db                 # SQLite database (auto-created)
+    ├── app.py                      # Flask application & all routes (~770 lines)
+    ├── firestore_db.py             # Firestore CRUD helpers
+    ├── firestore_client.py         # Firestore connection initialisation
+    ├── questions.py                # Question loader & normaliser
+    ├── requirements.txt            # Python dependencies
+    ├── README.md                   # This file
     ├── static/
-    │   └── style.css           # Dark theme CSS
+    │   └── style.css               # CSS variables, dark/light theme, Bootstrap overrides
     └── templates/
-        ├── login.html          # Token login page
-        ├── dashboard.html      # Exam list, history, token redemption
-        ├── exam.html           # Exam UI (timer, navigator, questions)
-        ├── results.html        # Score card, objectives, question review
-        └── admin.html          # Admin panel
+        ├── login.html              # Token login page
+        ├── dashboard.html          # Exam list, history, exam-token redemption
+        ├── exam.html               # Exam UI (timer, navigator, questions)
+        ├── results.html            # Score card, objectives breakdown, question review
+        ├── admin.html              # Admin – 📊 Analytics (stats, leaderboard, all results)
+        ├── admin_users.html        # Admin – 👥 Users (create/delete users, exam tokens)
+        └── admin_quizzes.html      # Admin – 📚 Quizzes (exam builder, import, edit questions)
 ```
 
 ---
 
 ## Quick Start
 
-### 1 — Install dependencies
+### 1 — Clone & install dependencies
 
 ```bash
 cd terraform_exam/app
-pip install flask
+pip install -r requirements.txt
 ```
 
-### 2 — Run the server
+> **Recommended:** use a dedicated virtual environment.  
+> The project was developed with **pyenv** env `exam` (Python 3.13).
+
+### 2 — Configure Google credentials
+
+Choose **one** of the three methods (evaluated in order at startup):
+
+| Priority | Method | How |
+|---|---|---|
+| 1 | `GOOGLE_CREDENTIALS_JSON` env var | Set to the full JSON content of the service-account key |
+| 2 | `GOOGLE_APPLICATION_CREDENTIALS` env var | Set to the absolute path of `credentials.json` |
+| 3 | Application Default Credentials (ADC) | Run `gcloud auth application-default login` |
+
+```bash
+# Example — path-based method
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/terraform_exam/credentials.json
+```
+
+### 3 — Run the server
 
 ```bash
 python app.py
 ```
 
-On the **first run** the database is created and a default admin account is generated:
+On the **first run** the Firestore collections are empty.  
+An admin user is created automatically:
 
 ```
 [INIT] Admin created. Token: admin-<hex>
@@ -87,10 +114,10 @@ On the **first run** the database is created and a default admin account is gene
 
 Copy that token — you will need it to log in as admin.
 
-### 3 — Open the app
+### 4 — Open the app
 
 ```
-http://localhost:5000
+http://localhost:8080
 ```
 
 Paste the admin token on the login page.
@@ -102,62 +129,41 @@ Paste the admin token on the login page.
 | Setting | Where | Default |
 |---|---|---|
 | Flask secret key | `app.py` (generated at startup) | Random hex — changes on each restart |
-| Database path | `models.py` → `DB_PATH` | `app/exam.db` |
-| Server port | `app.py` → `app.run(port=5000)` | `5000` |
+| Firestore project ID | `firestore_client.py` | `quizz-terraform` |
+| Server port | `app.py` → `app.run(port=8080)` | `8080` |
 | Default exam duration | Dashboard UI & exam token form | `60` minutes |
 | Pass threshold | Hard-coded in templates | `70 %` |
 
 ---
 
-## Database Schema
+## Database (Firestore)
 
-### `users`
-| Column | Type | Description |
-|---|---|---|
-| `id` | INTEGER PK | Auto-increment |
-| `username` | TEXT UNIQUE | Display name |
-| `token` | TEXT UNIQUE | Login token (`admin-…` or `usr-…`) |
-| `role` | TEXT | `admin` or `user` |
-| `created_at` | DATETIME | Creation timestamp |
+The application uses **Google Firestore** (project `quizz-terraform`) instead of a local SQLite file.  
+All helpers live in `firestore_db.py`; the client is initialised once in `firestore_client.py`.
 
-### `exam_sessions`
-| Column | Type | Description |
-|---|---|---|
-| `id` | INTEGER PK | Auto-increment |
-| `user_id` | INTEGER FK | Owner |
-| `exam_id` | INTEGER | `2` or `3` |
-| `started_at` | DATETIME | Session start (used to compute remaining time) |
-| `finished_at` | DATETIME | Null until finished |
-| `score` | INTEGER | Number of correct answers |
-| `total` | INTEGER | Total questions |
-| `status` | TEXT | `in_progress` or `finished` |
-| `mode` | TEXT | `practice` or `exam` |
-| `duration_minutes` | INTEGER | Allowed time in minutes |
+### Collections
 
-### `answers`
-| Column | Type | Description |
-|---|---|---|
-| `id` | INTEGER PK | Auto-increment |
-| `session_id` | INTEGER FK | Parent session |
-| `question_num` | INTEGER | Question number (1-based) |
-| `user_answer` | TEXT | JSON array for multi-select, plain string otherwise |
-| `is_correct` | INTEGER | `1` / `0` |
-| `result` | TEXT | `correct`, `incorrect`, or `skipped` |
-| `objective` | TEXT | Objective domain label |
+| Collection | Description |
+|---|---|
+| `users` | One document per user: `username`, `token`, `role`, `created_at` |
+| `exam_sessions` | One document per attempt: `user_id`, `exam_id`, `started_at`, `finished_at`, `score`, `total`, `status`, `mode`, `duration_minutes` |
+| `answers` | Sub-collection under each session: `question_num`, `user_answer`, `is_correct`, `result`, `objective` |
+| `exam_tokens` | Pre-configured attempt tokens: `token`, `exam_id`, `assigned_to`, `mode`, `duration_minutes`, `used_by`, `used_at`, `label`, `created_at` |
+| `custom_exams` | Admin-created exam metadata: `name`, `description`, `created_at` |
+| `custom_questions` | Questions linked to a custom exam: full question fields + `exam_id` reference |
 
-### `exam_tokens`
-| Column | Type | Description |
-|---|---|---|
-| `id` | INTEGER PK | Auto-increment |
-| `token` | TEXT UNIQUE | `et-<hex>` token shared with candidate |
-| `exam_id` | INTEGER | Target exam |
-| `assigned_to` | INTEGER FK | Specific user, or NULL (any user) |
-| `mode` | TEXT | `exam` or `practice` |
-| `duration_minutes` | INTEGER | Timer duration |
-| `used_by` | INTEGER FK | User who redeemed it |
-| `used_at` | DATETIME | Redemption timestamp |
-| `label` | TEXT | Optional descriptive label |
-| `created_at` | DATETIME | Creation timestamp |
+### Key `firestore_db.py` functions
+
+| Function | Purpose |
+|---|---|
+| `get_user_by_token(token)` | Authenticate a user by token |
+| `create_user(username)` | Create user, return `usr-…` token |
+| `get_all_sessions()` | Fetch all sessions (admin leaderboard / all-results) |
+| `create_custom_exam(name, description)` | Create a custom exam document |
+| `add_custom_question(exam_id, …)` | Append a question to a custom exam |
+| `get_custom_question_by_id(q_id)` | Fetch a single question for editing |
+| `update_custom_question(q_id, …)` | Update an existing question in-place |
+| `delete_custom_question(q_id)` | Remove a question document |
 
 ---
 
@@ -194,7 +200,15 @@ Admin endpoints additionally require `role = admin`.
 |---|---|---|---|
 | `POST` | `/api/redeem_exam_token` | `{ exam_token }` | Validates and redeems an exam token, returns exam/mode/duration |
 
-### Admin
+### Admin – Pages
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/admin` | Analytics: stats cards, leaderboard, all results |
+| `GET` | `/admin/users` | User management: create/delete users, exam tokens |
+| `GET` | `/admin/quizzes` | Quiz management: exam builder, JSON import, edit questions |
+
+### Admin – API
 
 | Method | Path | Body | Description |
 |---|---|---|---|
@@ -206,6 +220,14 @@ Admin endpoints additionally require `role = admin`.
 | `GET` | `/api/admin/exam_tokens` | — | Lists all exam tokens |
 | `DELETE` | `/api/admin/delete_exam_token/<id>` | — | Deletes exam token |
 | `GET` | `/api/admin/all_results` | — | All sessions for all users |
+| `POST` | `/api/admin/create_custom_exam` | `{ name, description }` | Creates a new custom exam |
+| `GET` | `/api/admin/custom_exams` | — | Lists all custom exams |
+| `DELETE` | `/api/admin/delete_custom_exam/<id>` | — | Deletes a custom exam and its questions |
+| `POST` | `/api/admin/add_question` | `{ exam_id, question, type, correct_answer, … }` | Adds a question to a custom exam |
+| `GET` | `/api/admin/question/<q_id>` | — | Fetches a single question (for edit pre-fill) |
+| `PUT` | `/api/admin/update_question/<q_id>` | `{ question, type, correct_answer, … }` | Updates an existing question |
+| `DELETE` | `/api/admin/delete_question/<q_id>` | — | Deletes a question |
+| `POST` | `/api/admin/import_questions` | `{ exam_id, questions[] }` | Bulk-imports questions from JSON |
 
 ---
 
@@ -242,7 +264,7 @@ Admin endpoints additionally require `role = admin`.
 Exam tokens (`et-…`) let an admin pre-configure an exam attempt and share a single token with a candidate.
 
 ### Admin workflow
-1. Open **Admin Panel → 🎟️ Create Exam Token**.
+1. Open **Admin → 👥 Users → 🎟️ Create Exam Token**.
 2. Select the exam, optionally assign to a specific user, choose mode and duration.
 3. Copy the generated `et-…` token and share it with the candidate (e.g. by email).
 
@@ -256,6 +278,30 @@ Exam tokens (`et-…`) let an admin pre-configure an exam attempt and share a si
 - An unassigned token can be redeemed by any authenticated user.
 - Once redeemed, the token is locked to that user — it cannot be used by someone else.
 - The candidate can resume an in-progress session normally (the token is not consumed again).
+
+---
+
+## Admin Panel
+
+The admin panel is split into three focused pages, accessible from the navbar on any admin page:
+
+### 📊 `/admin` — Analytics
+- **Stats cards**: total users, completed exams, active exam tokens
+- **Leaderboard**: top performers ranked by average score
+- **All Results**: every session from every user with score, mode and date
+
+### 👥 `/admin/users` — User Management
+- **Create User**: enter a username → receive a `usr-…` token to share
+- **Users Table**: list all users, copy token, reset token, delete user
+- **Create Exam Token**: configure exam, mode, duration and optional assignment → receive `et-…` token
+- **Exam Tokens Table**: list all tokens with status (unused / redeemed by whom)
+
+### 📚 `/admin/quizzes` — Quiz Management
+- **Exam Builder**: create a custom exam (name + description)
+- **Question Editor**: add questions one-by-one with type, options, correct answer, domain, explanation and key takeaway
+- **Edit Questions**: click ✏️ on any question row — form pre-fills via `GET /api/admin/question/<id>`, saves via `PUT /api/admin/update_question/<id>`
+- **Import JSON**: paste a JSON array of questions to bulk-import into any custom exam
+- **Custom Exams Table**: manage custom exams and their question lists
 
 ---
 

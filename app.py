@@ -114,6 +114,10 @@ def exam_page(exam_id):
         if not allowed:
             if firestore_db.get_inprogress_session(user["id"], exam_id):
                 allowed = True
+        # Check if they redeemed an exam token for this exam
+        if not allowed:
+            if firestore_db.get_used_token_for_user_and_exam(user["id"], exam_id):
+                allowed = True
         if not allowed:
             return redirect(url_for("dashboard"))
 
@@ -194,6 +198,19 @@ def results_page(session_id):
 def admin_page():
     users = firestore_db.get_all_users()
     return render_template("admin.html", users=users, user=request.current_user, exams=list_exams())
+
+
+@app.route("/admin/users")
+@require_admin
+def admin_users_page():
+    users = firestore_db.get_all_users()
+    return render_template("admin_users.html", users=users, user=request.current_user, exams=list_exams())
+
+
+@app.route("/admin/quizzes")
+@require_admin
+def admin_quizzes_page():
+    return render_template("admin_quizzes.html", user=request.current_user)
 
 
 @app.route("/admin/download_db")
@@ -632,6 +649,44 @@ def api_add_question():
 @require_admin
 def api_delete_question(q_id):
     firestore_db.delete_custom_question(q_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/question/<q_id>")
+@require_admin
+def api_get_question(q_id):
+    q = firestore_db.get_custom_question_by_id(q_id)
+    if not q:
+        return jsonify({"error": "Not found"}), 404
+    return jsonify(q)
+
+
+@app.route("/api/admin/update_question/<q_id>", methods=["PUT"])
+@require_admin
+def api_update_question(q_id):
+    data = request.json or {}
+    question_text = data.get("question", "").strip()
+    q_type = data.get("type", "multiple_choice")
+    correct_answer = data.get("correct_answer")
+    all_options = data.get("all_options", {})
+    domain = data.get("domain", "").strip()
+    objective = data.get("objective", "").strip()
+    explanation = data.get("explanation", "").strip()
+    key_takeaway = data.get("key_takeaway", "").strip()
+
+    if not question_text or not correct_answer:
+        return jsonify({"error": "question and correct_answer are required"}), 400
+
+    correct_json = json.dumps(correct_answer) if isinstance(correct_answer, list) else correct_answer
+    options_json = json.dumps(all_options)
+
+    try:
+        firestore_db.update_custom_question(
+            q_id, question_text, q_type, correct_json, options_json,
+            domain, objective, explanation, key_takeaway
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
     return jsonify({"ok": True})
 
 

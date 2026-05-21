@@ -327,6 +327,18 @@ def delete_exam_token_by_id(token_doc_id: int | str) -> None:
     _col("exam_tokens").document(str(token_doc_id)).delete()
 
 
+def get_used_token_for_user_and_exam(user_id: int | str, exam_id: int) -> dict | None:
+    """Vérifie si l'user a utilisé un token pour cet exam (accès autorisé)."""
+    docs = (_col("exam_tokens")
+            .where(filter=FieldFilter("used_by", "==", int(user_id)))
+            .where(filter=FieldFilter("exam_id", "==", exam_id))
+            .limit(1)
+            .stream())
+    for doc in docs:
+        return _doc_to_dict(doc)
+    return None
+
+
 def count_exam_tokens() -> int:
     return sum(1 for _ in _col("exam_tokens").stream())
 
@@ -440,6 +452,26 @@ def create_custom_question(exam_id: int | str, question_num: int, question: str,
         "key_takeaway": key_takeaway,
     })
     return ref.id
+
+
+def get_custom_question_by_id(q_id: int | str) -> dict | None:
+    return _doc_to_dict(_col("custom_questions").document(str(q_id)).get())
+
+
+def update_custom_question(q_id: int | str, question: str, q_type: str,
+                           correct_answer: str, all_options: str,
+                           domain: str, objective: str, explanation: str,
+                           key_takeaway: str) -> None:
+    _col("custom_questions").document(str(q_id)).update({
+        "question": question,
+        "type": q_type,
+        "correct_answer": correct_answer,
+        "all_options": all_options,
+        "domain": domain,
+        "objective": objective,
+        "explanation": explanation,
+        "key_takeaway": key_takeaway,
+    })
 
 
 def delete_custom_question(q_id: int | str) -> None:

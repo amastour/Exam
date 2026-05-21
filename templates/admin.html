@@ -1,18 +1,21 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Panel – Terraform Exam</title>
+  <title>Analytics – Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <nav class="navbar">
-    <div class="nav-brand">🏗️ Terraform Exam – Admin</div>
+    <div class="nav-brand">🏗️ Admin – Analytics</div>
     <div class="nav-actions">
-      <span class="nav-user">🔑 {{ user.username }}</span>
-      <a href="/admin/download_db" class="btn btn-sm btn-outline" title="Download exam.db backup">⬇️ Download DB</a>
+      <a href="/admin" class="btn btn-sm btn-primary">📊 Analytics</a>
+      <a href="/admin/users" class="btn btn-sm btn-outline">👥 Users</a>
+      <a href="/admin/quizzes" class="btn btn-sm btn-outline">📚 Quizzes</a>
       <a href="/dashboard" class="btn btn-sm btn-outline">Dashboard</a>
+      <button id="themeToggle" class="theme-toggle">🌙</button>
       <button onclick="logout()" class="btn btn-sm btn-danger">Logout</button>
     </div>
   </nav>
@@ -21,353 +24,25 @@
 
     <!-- Stats -->
     <div class="admin-stats" id="adminStats">
-      <div class="stat-card">
-        <div class="stat-num" id="statUsers">–</div>
-        <div class="stat-label">Users</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num" id="statExams">–</div>
-        <div class="stat-label">Regular Exams</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num" id="statQuizzes">–</div>
-        <div class="stat-label">Objective Quizzes</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num" id="statQuestions">–</div>
-        <div class="stat-label">Total Questions</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num" id="statObjectives">–</div>
-        <div class="stat-label">Objectives</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num" id="statCompleted">–</div>
-        <div class="stat-label">Completed Sessions</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num" id="statInProgress">–</div>
-        <div class="stat-label">In Progress</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num" id="statTokens">–</div>
-        <div class="stat-label">Exam Tokens</div>
-      </div>
+      <div class="stat-card"><div class="stat-num" id="statUsers">–</div><div class="stat-label">Users</div></div>
+      <div class="stat-card"><div class="stat-num" id="statExams">–</div><div class="stat-label">Regular Exams</div></div>
+      <div class="stat-card"><div class="stat-num" id="statQuizzes">–</div><div class="stat-label">Objective Quizzes</div></div>
+      <div class="stat-card"><div class="stat-num" id="statQuestions">–</div><div class="stat-label">Total Questions</div></div>
+      <div class="stat-card"><div class="stat-num" id="statObjectives">–</div><div class="stat-label">Objectives</div></div>
+      <div class="stat-card"><div class="stat-num" id="statCompleted">–</div><div class="stat-label">Completed Sessions</div></div>
+      <div class="stat-card"><div class="stat-num" id="statInProgress">–</div><div class="stat-label">In Progress</div></div>
+      <div class="stat-card"><div class="stat-num" id="statTokens">–</div><div class="stat-label">Exam Tokens</div></div>
     </div>
 
-    <!-- Create User -->
-    <section class="section">
-      <h2>➕ Create New User</h2>
-      <div class="create-user-form">
-        <input type="text" id="newUsername" placeholder="Username" class="input-field">
-        <button class="btn btn-primary" onclick="createUser()">Create & Generate Token</button>
-      </div>
-      <div id="newTokenBox" class="token-box hidden">
-        <p>✅ User created! Share this token:</p>
-        <div class="token-display">
-          <code id="newTokenValue"></code>
-          <button class="btn btn-sm btn-outline" onclick="copyToken()">📋 Copy</button>
-        </div>
-      </div>
-      <div id="createError" class="error-msg hidden"></div>
-    </section>
-
-    <!-- ═══ Custom Exam Builder ═══ -->
-    <section class="section">
-      <h2>🛠️ Create Custom Exam / Quiz</h2>
-      <div class="exam-builder-form">
-        <div class="form-group">
-          <label>Exam Title</label>
-          <input type="text" id="ceTitle" class="input-field" placeholder="e.g. Modules & State Quiz" style="min-width:300px">
-        </div>
-        <div class="form-group">
-          <label>Description (optional)</label>
-          <input type="text" id="ceDesc" class="input-field" placeholder="Short description…" style="min-width:300px">
-        </div>
-        <div class="form-group">
-          <label>Exam Type</label>
-          <div style="display:flex;gap:16px;align-items:center;margin-top:4px">
-            <label class="mode-label">
-              <input type="radio" name="ceType" value="regular" checked onchange="toggleExamType()"> 📝 Regular (add questions manually)
-            </label>
-            <label class="mode-label">
-              <input type="radio" name="ceType" value="objective" onchange="toggleExamType()"> 📚 Objective Quiz (auto-pull by objective)
-            </label>
-          </div>
-        </div>
-        <div id="ceDomainGroup" class="form-group hidden">
-          <label>Objectives / Domains <span class="small-text">(select one or more — Ctrl+Click)</span></label>
-          <select id="ceObjectives" class="input-field" multiple style="min-width:400px;height:160px"></select>
-          <p class="hint" style="margin-top:6px">
-            Questions matching the selected objectives are automatically linked to this quiz.
-            You can also add questions manually afterwards.
-          </p>
-        </div>
-        <button class="btn btn-primary" onclick="createCustomExam()">✅ Create</button>
-        <div id="ceError" class="error-msg hidden" style="margin-top:8px"></div>
-        <div id="ceSuccess" class="token-box hidden" style="margin-top:8px">
-          <p id="ceSuccessMsg"></p>
-        </div>
-      </div>
-    </section>
-
-    <!-- Import Quiz from JSON -->
-    <section class="section">
-      <h2>📥 Import Quiz from JSON</h2>
-      <div class="exam-builder-form">
-        <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
-          <div class="form-group" style="margin:0">
-            <label>Download empty skeleton</label>
-            <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
-              <input type="number" id="skeletonN" class="input-field" value="10" min="1" max="200" style="width:80px" title="Number of questions">
-              <input type="text" id="skeletonTitle" class="input-field" placeholder="Quiz title" style="min-width:200px">
-              <button class="btn btn-outline" onclick="downloadSkeleton()">⬇️ Download Skeleton</button>
-            </div>
-          </div>
-        </div>
-        <div style="margin-top:18px">
-          <label class="form-group" style="display:block;margin-bottom:6px">Upload filled JSON</label>
-          <div id="importDropZone" class="import-drop-zone" onclick="document.getElementById('importFileInput').click()" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handleImportDrop(event)">
-            <span id="importDropLabel">📂 Click or drag & drop your JSON file here</span>
-          </div>
-          <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="handleImportFile(this.files[0])">
-        </div>
-        <div id="importError" class="error-msg hidden" style="margin-top:8px"></div>
-        <div id="importSuccess" class="token-box hidden" style="margin-top:8px">
-          <p id="importSuccessMsg"></p>
-        </div>
-      </div>
-    </section>
-
-    <!-- All Exams List -->
-    <section class="section">
-      <h2>📋 All Exams</h2>
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Title</th>
-              <th>Type</th>
-              <th>Source</th>
-              <th>Questions</th>
-              <th>Visible to Users</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="allExamsTbody">
-            <tr><td colspan="7" class="small-text" style="padding:16px">Loading…</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Custom Exams List -->
-    <section class="section">
-      <h2>📚 Custom Exams & Quizzes</h2>
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr><th>ID</th><th>Title</th><th>Type</th><th>Questions</th><th>Objectives</th><th>Visible to Users</th><th>Created</th><th>Actions</th></tr>
-          </thead>
-          <tbody id="customExamsTbody">
-            <tr><td colspan="8" class="small-text" style="padding:16px">Loading…</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Question Editor (for regular custom exams) -->
-    <div id="questionEditor" class="hidden">
-      <section class="section" style="border:2px solid var(--primary);border-radius:12px;padding:20px">
-        <h2>✏️ Add Questions to: <span id="qeExamTitle" style="color:var(--primary)"></span></h2>
-        <div class="question-editor-form">
-          <div class="form-group">
-            <label>Question Text</label>
-            <textarea id="qeQuestion" rows="3" class="input-field" style="width:100%;min-height:80px;resize:vertical" placeholder="Question text…"></textarea>
-          </div>
-          <div style="display:flex;gap:16px;flex-wrap:wrap">
-            <div class="form-group">
-              <label>Question Type</label>
-              <select id="qeType" class="input-field" onchange="renderOptionsEditor()">
-                <option value="multiple_choice">Multiple Choice</option>
-                <option value="multi_select">Multi-Select</option>
-                <option value="true_false">True / False</option>
-                <option value="open">Open / Text</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Domain</label>
-              <select id="qeDomain" class="input-field" style="min-width:260px">
-                <option value="">— none —</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Objective</label>
-              <select id="qeObjective" class="input-field" style="min-width:300px">
-                <option value="">— none —</option>
-              </select>
-            </div>
-          </div>
-          <!-- Options editor (MC / multi) -->
-          <div id="qeOptionsArea" class="form-group">
-            <label>Answer Options &amp; Correct Answer</label>
-            <div id="qeOptionsList"></div>
-            <button class="btn btn-sm btn-outline" style="margin-top:6px" onclick="addOption()">+ Add Option</button>
-          </div>
-          <!-- True/False correct -->
-          <div id="qeTFArea" class="form-group hidden">
-            <label>Correct Answer</label>
-            <div style="display:flex;gap:16px;margin-top:4px">
-              <label class="mode-label"><input type="radio" name="qeTF" value="True"> True</label>
-              <label class="mode-label"><input type="radio" name="qeTF" value="False"> False</label>
-            </div>
-          </div>
-          <!-- Open correct -->
-          <div id="qeOpenArea" class="form-group hidden">
-            <label>Correct Answer (text)</label>
-            <input type="text" id="qeOpenCorrect" class="input-field" placeholder="Expected answer…" style="min-width:300px">
-          </div>
-          <div class="form-group">
-            <label>Explanation</label>
-            <textarea id="qeExplanation" rows="2" class="input-field" style="width:100%;resize:vertical" placeholder="Why is this the correct answer?"></textarea>
-          </div>
-          <div class="form-group">
-            <label>Key Takeaway</label>
-            <input type="text" id="qeKeyTakeaway" class="input-field" style="width:100%" placeholder="One-line summary…">
-          </div>
-          <div style="display:flex;gap:10px;align-items:center">
-            <button class="btn btn-primary" onclick="saveQuestion()">💾 Save Question</button>
-            <button class="btn btn-outline" onclick="closeQuestionEditor()">✖ Close</button>
-            <div id="qeError" class="error-msg hidden" style="margin:0"></div>
-            <div id="qeSuccess" style="color:var(--success);font-size:.85rem" class="hidden">✅ Question saved!</div>
-          </div>
-        </div>
-
-        <!-- Questions list for this exam -->
-        <div style="margin-top:24px">
-          <h3 style="font-size:.95rem;margin-bottom:10px;color:var(--text-muted)">📋 Questions in this exam (<span id="qeCount">0</span>)</h3>
-          <div id="qeQuestionsList" class="table-wrap">
-            <p class="small-text">No questions yet.</p>
-          </div>
-        </div>
-      </section>
-    </div>
-
-    <!-- Users Table -->
-    <section class="section">
-      <h2>👥 Users</h2>
-      <div class="table-wrap">
-        <table class="table" id="usersTable">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Username</th>
-              <th>Role</th>
-              <th>Token</th>
-              <th>Created</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for u in users %}
-            <tr id="user-row-{{ u.id }}">
-              <td>{{ u.id }}</td>
-              <td>{{ u.username }}</td>
-              <td><span class="badge {% if u.role == 'admin' %}badge-admin{% else %}badge-user{% endif %}">{{ u.role }}</span></td>
-              <td>
-                <div class="token-row">
-                  <code class="token-short" id="token-{{ u.id }}">{{ u.token[:20] }}…</code>
-                  <button class="btn btn-sm btn-outline" onclick="toggleToken({{ u.id }}, '{{ u.token }}')">👁</button>
-                  <button class="btn btn-sm btn-outline" onclick="copyTokenById('{{ u.token }}')">📋</button>
-                </div>
-              </td>
-              <td class="small-text">{{ u.created_at }}</td>
-              <td>
-                {% if u.role != 'admin' %}
-                <button class="btn btn-sm btn-outline" onclick="resetToken({{ u.id }})">🔄 Reset Token</button>
-                <button class="btn btn-sm btn-danger" onclick="deleteUser({{ u.id }}, '{{ u.username }}')">🗑 Delete</button>
-                {% else %}
-                <span class="small-text">–</span>
-                {% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Create Exam Token -->
-    <section class="section">
-      <h2>🎟️ Create Exam Token</h2>
-      <div class="exam-token-form">
-        <select id="etExamId" class="input-field" style="min-width:140px">
-          {% for exam in exams %}
-          <option value="{{ exam.id }}">Exam #{{ exam.id }} – {{ exam.title }}</option>
-          {% endfor %}
-        </select>
-        <select id="etAssignTo" class="input-field" style="min-width:160px">
-          <option value="">Any user</option>
-          {% for u in users %}
-          {% if u.role != 'admin' %}
-          <option value="{{ u.id }}">{{ u.username }}</option>
-          {% endif %}
-          {% endfor %}
-        </select>
-        <select id="etMode" class="input-field" style="min-width:120px">
-          <option value="exam">Exam mode</option>
-          <option value="practice">Practice mode</option>
-        </select>
-        <input type="number" id="etDuration" value="60" min="5" max="300" class="input-field" style="width:80px" title="Duration in minutes">
-        <span class="dur-unit">min</span>
-        <input type="text" id="etLabel" class="input-field" placeholder="Label (optional)" style="min-width:160px">
-        <button class="btn btn-primary" onclick="createExamToken()">Generate Token</button>
-      </div>
-      <div id="etTokenBox" class="token-box hidden" style="margin-top:12px">
-        <p>✅ Exam token created! Share this with the student:</p>
-        <div class="token-display">
-          <code id="etTokenValue"></code>
-          <button class="btn btn-sm btn-outline" onclick="copyEtToken()">📋 Copy</button>
-        </div>
-      </div>
-      <div id="etError" class="error-msg hidden"></div>
-    </section>
-
-    <!-- Exam Tokens Table -->
-    <section class="section">
-      <h2>🗂️ Exam Tokens</h2>
-      <div class="table-wrap">
-        <table class="table" id="examTokensTable">
-          <thead>
-            <tr>
-              <th>Token</th>
-              <th>Exam</th>
-              <th>Assigned To</th>
-              <th>Mode</th>
-              <th>Duration</th>
-              <th>Used By</th>
-              <th>Label</th>
-              <th>Created</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="examTokensTbody">
-            <tr><td colspan="9" class="small-text" style="padding:16px">Loading…</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- Classement / Leaderboard -->
+    <!-- Leaderboard -->
     <section class="section">
       <h2>🏆 Classement des Utilisateurs</h2>
-      <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+      <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
         <label class="small-text">Filtrer par examen :</label>
         <select id="lbExamFilter" class="input-field" style="min-width:200px" onchange="loadLeaderboard()">
           <option value="">— Tous les examens —</option>
         </select>
-        <label class="small-text" style="margin-left:8px">Mode :</label>
+        <label class="small-text ms-2">Mode :</label>
         <select id="lbModeFilter" class="input-field" style="min-width:130px" onchange="loadLeaderboard()">
           <option value="">Tous</option>
           <option value="exam">Exam</option>
@@ -378,19 +53,12 @@
         <table class="table">
           <thead>
             <tr>
-              <th style="width:50px">Rang</th>
-              <th>Utilisateur</th>
-              <th>Examens passés</th>
-              <th>Meilleur score</th>
-              <th>Meilleur %</th>
-              <th>Score moyen %</th>
-              <th>Réussite (≥70%)</th>
-              <th>Dernier examen</th>
+              <th style="width:50px">Rang</th><th>Utilisateur</th><th>Examens</th>
+              <th>Meilleur score</th><th>Meilleur %</th><th>Moy %</th>
+              <th>Réussite</th><th class="d-none d-md-table-cell">Dernier</th>
             </tr>
           </thead>
-          <tbody id="leaderboardTbody">
-            <tr><td colspan="8" class="small-text" style="padding:16px">Loading…</td></tr>
-          </tbody>
+          <tbody id="leaderboardTbody"><tr><td colspan="8" class="small-text" style="padding:16px">Loading…</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -399,100 +67,37 @@
     <section class="section">
       <h2>📊 All Results</h2>
       <div class="table-wrap">
-        <table class="table" id="allResultsTable">
+        <table class="table">
           <thead>
             <tr>
-              <th>User</th>
-              <th>Exam</th>
-              <th>Mode</th>
-              <th>Status</th>
-              <th>Score</th>
-              <th>%</th>
-              <th>Started</th>
-              <th>Finished</th>
-              <th>Action</th>
+              <th>User</th><th>Exam</th><th>Mode</th><th>Status</th><th>Score</th><th>%</th>
+              <th class="d-none d-md-table-cell">Started</th><th class="d-none d-lg-table-cell">Finished</th><th>Action</th>
             </tr>
           </thead>
-          <tbody id="allResultsTbody">
-            <tr><td colspan="9" class="small-text" style="padding:16px">Loading…</td></tr>
-          </tbody>
+          <tbody id="allResultsTbody"><tr><td colspan="9" class="small-text" style="padding:16px">Loading…</td></tr></tbody>
         </table>
       </div>
     </section>
+
   </div>
 
   <script>
-    async function loadAllExams() {
-      const res = await fetch('/api/admin/all_exams');
-      const exams = await res.json();
-      const tbody = document.getElementById('allExamsTbody');
-      if (!exams.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="small-text" style="padding:16px">No exams found.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = exams.map(e => {
-        const typeBadge = e.exam_type === 'objective'
-          ? '<span class="badge badge-admin">objective</span>'
-          : '<span class="badge badge-user">regular</span>';
-        const sourceBadge = e.source === 'file'
-          ? '<span class="badge" style="background:var(--text-muted);color:#fff">static</span>'
-          : '<span class="badge" style="background:var(--primary);color:#fff">custom</span>';
-        const visCell = e.source === 'file'
-          ? '<span class="small-text">always visible</span>'
-          : (e.visible_to_users
-              ? `<button class="btn btn-sm btn-success" onclick="toggleVisibility(${e.id})">👁 Visible</button>`
-              : `<button class="btn btn-sm btn-outline" onclick="toggleVisibility(${e.id})">🙈 Hidden</button>`);
-        const actions = [];
-        actions.push(`<a href="/exam/${e.id}" target="_blank" class="btn btn-sm btn-outline">▶ Preview</a>`);
-        if (e.source !== 'file') {
-          actions.push(`<button class="btn btn-sm btn-primary" onclick="openQuestionEditor(${e.id}, '${(e.title||'').replace(/'/g,"\\'")}', '${e.exam_type}')">✏️ Edit</button>`);
-          actions.push(`<button class="btn btn-sm btn-danger" onclick="deleteCustomExam(${e.id}, '${(e.title||'').replace(/'/g,"\\'")}')">🗑 Delete</button>`);
-        }
-        return `<tr>
-          <td>${e.id}</td>
-          <td><b>${e.title}</b></td>
-          <td>${typeBadge}</td>
-          <td>${sourceBadge}</td>
-          <td>${e.total}</td>
-          <td>${visCell}</td>
-          <td style="display:flex;gap:6px;flex-wrap:wrap">${actions.join('')}</td>
-        </tr>`;
-      }).join('');
-    }
+    // ── Theme ────────────────────────────────────────────────────
+    const root = document.documentElement;
+    const themeBtn = document.getElementById('themeToggle');
+    const saved = localStorage.getItem('theme') || 'dark';
+    root.setAttribute('data-theme', saved);
+    themeBtn.textContent = saved === 'dark' ? '🌙' : '☀️';
+    themeBtn.addEventListener('click', () => {
+      const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      themeBtn.textContent = next === 'dark' ? '🌙' : '☀️';
+    });
 
-    async function loadLeaderboard() {
-      const examId = document.getElementById('lbExamFilter').value;
-      const mode = document.getElementById('lbModeFilter').value;
-      const params = new URLSearchParams();
-      if (examId) params.set('exam_id', examId);
-      if (mode) params.set('mode', mode);
-      const res = await fetch('/api/admin/leaderboard?' + params.toString());
-      const rows = await res.json();
-      const tbody = document.getElementById('leaderboardTbody');
-      if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="small-text" style="padding:16px">Aucun résultat.</td></tr>';
-        return;
-      }
-      const medals = ['🥇', '🥈', '🥉'];
-      tbody.innerHTML = rows.map((r, i) => {
-        const rank = medals[i] || `#${i + 1}`;
-        const bestPct = r.best_pct !== null ? r.best_pct.toFixed(1) : '–';
-        const avgPct  = r.avg_pct  !== null ? r.avg_pct.toFixed(1)  : '–';
-        const bestPctClass = r.best_pct >= 70 ? 'pass' : 'fail';
-        const passRate = r.total_finished > 0
-          ? `${r.passed}/${r.total_finished} (${Math.round(r.passed/r.total_finished*100)}%)`
-          : '–';
-        return `<tr>
-          <td style="text-align:center;font-size:1.2rem">${rank}</td>
-          <td><b>${r.username}</b></td>
-          <td style="text-align:center">${r.total_finished}</td>
-          <td style="text-align:center">${r.best_score !== null ? r.best_score + ' / ' + r.best_total : '–'}</td>
-          <td style="text-align:center"><span class="pct ${r.best_pct !== null ? bestPctClass : ''}">${bestPct}${r.best_pct !== null ? '%' : ''}</span></td>
-          <td style="text-align:center"><span class="pct ${r.avg_pct >= 70 ? 'pass' : 'fail'}">${avgPct}${r.avg_pct !== null ? '%' : ''}</span></td>
-          <td style="text-align:center">${passRate}</td>
-          <td class="small-text">${r.last_exam || '–'}</td>
-        </tr>`;
-      }).join('');
+    async function logout() {
+      await fetch('/api/logout', { method: 'POST' });
+      window.location.href = '/login';
     }
 
     async function loadStats() {
@@ -508,149 +113,39 @@
       document.getElementById('statTokens').textContent = data.exam_tokens;
     }
 
-    async function createUser() {
-      const username = document.getElementById('newUsername').value.trim();
-      const errEl = document.getElementById('createError');
-      const tokenBox = document.getElementById('newTokenBox');
-      errEl.classList.add('hidden');
-      tokenBox.classList.add('hidden');
-      if (!username) { errEl.textContent = 'Username is required'; errEl.classList.remove('hidden'); return; }
-
-      const res = await fetch('/api/admin/create_user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        document.getElementById('newTokenValue').textContent = data.token;
-        tokenBox.classList.remove('hidden');
-        document.getElementById('newUsername').value = '';
-        loadStats();
-        const tbody = document.querySelector('#usersTable tbody');
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>–</td><td>${data.username}</td><td><span class="badge badge-user">user</span></td>
-          <td><code class="token-short">${data.token.slice(0,20)}…</code></td><td>just now</td>
-          <td><button class="btn btn-sm btn-outline">🔄 Reset Token</button></td>`;
-        tbody.prepend(tr);
-      } else {
-        errEl.textContent = data.error || 'Error creating user';
-        errEl.classList.remove('hidden');
-      }
+    async function loadLeaderboard() {
+      const examId = document.getElementById('lbExamFilter').value;
+      const mode = document.getElementById('lbModeFilter').value;
+      const params = new URLSearchParams();
+      if (examId) params.set('exam_id', examId);
+      if (mode) params.set('mode', mode);
+      const res = await fetch('/api/admin/leaderboard?' + params.toString());
+      const rows = await res.json();
+      const tbody = document.getElementById('leaderboardTbody');
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="8" class="small-text" style="padding:16px">Aucun résultat.</td></tr>'; return; }
+      const medals = ['🥇', '🥈', '🥉'];
+      tbody.innerHTML = rows.map((r, i) => {
+        const bestPct = r.best_pct !== null ? r.best_pct.toFixed(1) : '–';
+        const avgPct  = r.avg_pct  !== null ? r.avg_pct.toFixed(1)  : '–';
+        const passRate = r.total_finished > 0 ? `${r.passed}/${r.total_finished} (${Math.round(r.passed/r.total_finished*100)}%)` : '–';
+        return `<tr>
+          <td style="text-align:center;font-size:1.2rem">${medals[i] || '#' + (i+1)}</td>
+          <td><b>${r.username}</b></td>
+          <td style="text-align:center">${r.total_finished}</td>
+          <td style="text-align:center">${r.best_score !== null ? r.best_score + ' / ' + r.best_total : '–'}</td>
+          <td style="text-align:center"><span class="pct ${r.best_pct >= 70 ? 'pass' : 'fail'}">${bestPct}${r.best_pct !== null ? '%' : ''}</span></td>
+          <td style="text-align:center"><span class="pct ${r.avg_pct >= 70 ? 'pass' : 'fail'}">${avgPct}${r.avg_pct !== null ? '%' : ''}</span></td>
+          <td style="text-align:center">${passRate}</td>
+          <td class="small-text d-none d-md-table-cell">${r.last_exam || '–'}</td>
+        </tr>`;
+      }).join('');
     }
 
-    async function deleteUser(id, username) {
-      if (!confirm(`Delete user "${username}"?`)) return;
-      const res = await fetch(`/api/admin/delete_user/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        document.getElementById(`user-row-${id}`)?.remove();
-        loadStats();
-      }
-    }
-
-    async function resetToken(id) {
-      if (!confirm('Reset token for this user? Their old token will stop working.')) return;
-      const res = await fetch(`/api/admin/reset_token/${id}`, { method: 'POST' });
-      const data = await res.json();
-      if (res.ok) {
-        const el = document.getElementById(`token-${id}`);
-        if (el) el.textContent = data.token.slice(0,20) + '…';
-        alert(`New token: ${data.token}`);
-      }
-    }
-
-    function toggleToken(id, fullToken) {
-      const el = document.getElementById(`token-${id}`);
-      if (el.textContent.includes('…')) {
-        el.textContent = fullToken;
-      } else {
-        el.textContent = fullToken.slice(0,20) + '…';
-      }
-    }
-
-    function copyToken() {
-      const val = document.getElementById('newTokenValue').textContent;
-      navigator.clipboard.writeText(val).then(() => alert('Token copied!'));
-    }
-
-    function copyTokenById(token) {
-      navigator.clipboard.writeText(token).then(() => alert('Token copied!'));
-    }
-
-    // ── Exam Tokens ──────────────────────────────────────────────────────
-    async function createExamToken() {
-      const examId = document.getElementById('etExamId').value;
-      const assignTo = document.getElementById('etAssignTo').value;
-      const mode = document.getElementById('etMode').value;
-      const duration = document.getElementById('etDuration').value;
-      const label = document.getElementById('etLabel').value.trim();
-      const errEl = document.getElementById('etError');
-      const box = document.getElementById('etTokenBox');
-      errEl.classList.add('hidden');
-      box.classList.add('hidden');
-
-      const res = await fetch('/api/admin/create_exam_token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ exam_id: parseInt(examId), assigned_to: assignTo ? parseInt(assignTo) : null, mode, duration: parseInt(duration), label })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        document.getElementById('etTokenValue').textContent = data.token;
-        box.classList.remove('hidden');
-        loadStats();
-        loadExamTokens();
-      } else {
-        errEl.textContent = data.error || 'Error';
-        errEl.classList.remove('hidden');
-      }
-    }
-
-    function copyEtToken() {
-      navigator.clipboard.writeText(document.getElementById('etTokenValue').textContent).then(() => alert('Token copied!'));
-    }
-
-    async function loadExamTokens() {
-      const res = await fetch('/api/admin/exam_tokens');
-      const tokens = await res.json();
-      const tbody = document.getElementById('examTokensTbody');
-      if (!tokens.length) {
-        tbody.innerHTML = '<tr><td colspan="9" class="small-text" style="padding:16px">No exam tokens yet.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = tokens.map(t => `
-        <tr>
-          <td><div class="token-row">
-            <code class="token-short">${t.token.slice(0,16)}…</code>
-            <button class="btn btn-sm btn-outline" onclick="copyTokenById('${t.token}')">📋</button>
-          </div></td>
-          <td>Exam #${t.exam_id}</td>
-          <td>${t.assigned_username || '<span class="small-text">Any</span>'}</td>
-          <td><span class="badge ${t.mode==='exam'?'badge-admin':'badge-user'}">${t.mode}</span></td>
-          <td>${t.duration_minutes} min</td>
-          <td>${t.used_username ? `✅ ${t.used_username}` : '<span class="small-text">–</span>'}</td>
-          <td class="small-text">${t.label || '–'}</td>
-          <td class="small-text">${t.created_at}</td>
-          <td><button class="btn btn-sm btn-danger" onclick="deleteExamToken(${t.id})">🗑</button></td>
-        </tr>
-      `).join('');
-    }
-
-    async function deleteExamToken(id) {
-      if (!confirm('Delete this exam token?')) return;
-      const res = await fetch(`/api/admin/delete_exam_token/${id}`, { method: 'DELETE' });
-      if (res.ok) loadExamTokens();
-    }
-
-    // ── All Results ──────────────────────────────────────────────────────
     async function loadAllResults() {
       const res = await fetch('/api/admin/all_results');
       const results = await res.json();
       const tbody = document.getElementById('allResultsTbody');
-      if (!results.length) {
-        tbody.innerHTML = '<tr><td colspan="9" class="small-text" style="padding:16px">No results yet.</td></tr>';
-        return;
-      }
+      if (!results.length) { tbody.innerHTML = '<tr><td colspan="9" class="small-text" style="padding:16px">No results yet.</td></tr>'; return; }
       tbody.innerHTML = results.map(r => {
         const pct = r.total ? Math.round(r.score / r.total * 100) : null;
         const pctStr = pct !== null ? `<span class="pct ${pct>=70?'pass':'fail'}">${pct}%</span>` : '–';
@@ -658,35 +153,21 @@
         const statusBadge = r.status === 'finished'
           ? '<span class="badge badge-success">finished</span>'
           : '<span class="badge badge-warning">in progress</span>';
-        const action = r.status === 'finished'
-          ? `<a href="/results/${r.id}" class="btn btn-sm btn-outline" target="_blank">View</a>`
-          : '–';
+        const action = r.status === 'finished' ? `<a href="/results/${r.id}" class="btn btn-sm btn-outline" target="_blank">View</a>` : '–';
         return `<tr>
           <td><b>${r.username}</b></td>
           <td>Exam #${r.exam_id}</td>
           <td><span class="badge ${r.mode==='exam'?'badge-admin':'badge-user'}">${r.mode||'practice'}</span></td>
-          <td>${statusBadge}</td>
-          <td>${scoreStr}</td>
-          <td>${pctStr}</td>
-          <td class="small-text">${r.started_at||'–'}</td>
-          <td class="small-text">${r.finished_at||'–'}</td>
+          <td>${statusBadge}</td><td>${scoreStr}</td><td>${pctStr}</td>
+          <td class="small-text d-none d-md-table-cell">${r.started_at||'–'}</td>
+          <td class="small-text d-none d-lg-table-cell">${r.finished_at||'–'}</td>
           <td>${action}</td>
         </tr>`;
       }).join('');
     }
 
-    async function logout() {
-      await fetch('/api/logout', { method: 'POST' });
-      window.location.href = '/login';
-    }
-
     loadStats();
-    loadExamTokens();
     loadAllResults();
-    loadDomains();
-    loadCustomExams();
-    loadAllExams();
-    // Populate leaderboard exam filter then load
     (async () => {
       const res = await fetch('/api/admin/all_exams');
       const exams = await res.json();
@@ -694,330 +175,6 @@
       exams.forEach(e => sel.appendChild(new Option(`Exam #${e.id} – ${e.title}`, e.id)));
       loadLeaderboard();
     })();
-
-    // ── Exam Type Toggle ────────────────────────────────────────────────
-    function toggleExamType() {
-      const type = document.querySelector('input[name="ceType"]:checked').value;
-      document.getElementById('ceDomainGroup').classList.toggle('hidden', type !== 'objective');
-    }
-
-    async function loadDomains() {
-      const res = await fetch('/api/admin/domains');
-      const data = await res.json();
-      const ceSel = document.getElementById('ceObjectives');
-      const qeSel = document.getElementById('qeDomain');
-      const qeObjSel = document.getElementById('qeObjective');
-      // Group: first domains, then objectives
-      const grpD = document.createElement('optgroup');
-      grpD.label = '── Domains ──';
-      data.domains.forEach(d => {
-        grpD.appendChild(new Option(d, d));
-        qeSel.appendChild(new Option(d, d));
-      });
-      ceSel.appendChild(grpD);
-      const grpO = document.createElement('optgroup');
-      grpO.label = '── Objectives ──';
-      data.objectives.forEach(o => {
-        grpO.appendChild(new Option(o, o));
-        qeObjSel.appendChild(new Option(o, o));
-      });
-      ceSel.appendChild(grpO);
-    }
-
-    // ── Custom Exam CRUD ────────────────────────────────────────────────
-    async function createCustomExam() {
-      const title = document.getElementById('ceTitle').value.trim();
-      const desc = document.getElementById('ceDesc').value.trim();
-      const exam_type = document.querySelector('input[name="ceType"]:checked').value;
-      const selectedOpts = [...document.getElementById('ceObjectives').selectedOptions].map(o => o.value);
-      const errEl = document.getElementById('ceError');
-      const sucEl = document.getElementById('ceSuccess');
-      errEl.classList.add('hidden');
-      sucEl.classList.add('hidden');
-      if (!title) { errEl.textContent = 'Title is required'; errEl.classList.remove('hidden'); return; }
-
-      const res = await fetch('/api/admin/create_custom_exam', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, description: desc, exam_type, objectives: selectedOpts })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        document.getElementById('ceSuccessMsg').textContent =
-          `✅ "${data.title}" created (ID ${data.id})${exam_type==='objective' ? ' — questions auto-linked from existing bank' : ' — add questions using ✏️ Edit Questions'}`;
-        sucEl.classList.remove('hidden');
-        document.getElementById('ceTitle').value = '';
-        document.getElementById('ceDesc').value = '';
-        loadCustomExams();
-        loadStats();
-      } else {
-        errEl.textContent = data.error || 'Error';
-        errEl.classList.remove('hidden');
-      }
-    }
-
-    async function loadCustomExams() {
-      const res = await fetch('/api/admin/custom_exams');
-      const exams = await res.json();
-      const tbody = document.getElementById('customExamsTbody');
-      if (!exams.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="small-text" style="padding:16px">No custom exams yet.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = exams.map(e => {
-        const objTags = (e.objectives_list || []).map(o =>
-          `<span class="badge badge-user" style="font-size:.7rem;margin:1px">${o}</span>`
-        ).join(' ') || '–';
-        const visBtn = e.visible_to_users
-          ? `<button class="btn btn-sm btn-success" onclick="toggleVisibility(${e.id})">👁 Visible</button>`
-          : `<button class="btn btn-sm btn-outline" onclick="toggleVisibility(${e.id})">🙈 Hidden</button>`;
-        return `<tr>
-          <td>${e.id}</td>
-          <td><b>${e.title}</b>${e.description ? `<br><span class="small-text">${e.description}</span>` : ''}</td>
-          <td><span class="badge ${e.exam_type==='objective'?'badge-admin':'badge-user'}">${e.exam_type}</span></td>
-          <td>${e.question_count}</td>
-          <td style="max-width:260px">${objTags}</td>
-          <td>${visBtn}</td>
-          <td class="small-text">${e.created_at}</td>
-          <td style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="btn btn-sm btn-primary" onclick="openQuestionEditor(${e.id}, '${e.title.replace(/'/g,"\\'")}', '${e.exam_type}')">✏️ Edit</button>
-            <button class="btn btn-sm btn-danger" onclick="deleteCustomExam(${e.id}, '${e.title.replace(/'/g,"\\'")}')">🗑 Delete</button>
-          </td>
-        </tr>`;
-      }).join('');
-    }
-
-    async function deleteCustomExam(id, title) {
-      if (!confirm(`Delete exam "${title}" and all its questions?`)) return;
-      const res = await fetch(`/api/admin/delete_custom_exam/${id}`, { method: 'DELETE' });
-      if (res.ok) { loadCustomExams(); loadAllExams(); loadStats(); }
-    }
-
-    async function toggleVisibility(id) {
-      const res = await fetch(`/api/admin/toggle_quiz_visibility/${id}`, { method: 'POST' });
-      if (res.ok) { loadCustomExams(); loadAllExams(); }
-    }
-
-    // ── Question Editor ─────────────────────────────────────────────────
-    let currentEditorExamId = null;
-    let currentEditorExamType = 'regular';
-    let optionCount = 0;
-
-    function openQuestionEditor(examId, title, examType) {
-      currentEditorExamId = examId;
-      currentEditorExamType = examType || 'regular';
-      document.getElementById('qeExamTitle').textContent = title;
-      document.getElementById('questionEditor').classList.remove('hidden');
-      document.getElementById('questionEditor').scrollIntoView({ behavior: 'smooth' });
-      renderOptionsEditor();
-      loadExamQuestions();
-    }
-
-    function closeQuestionEditor() {
-      document.getElementById('questionEditor').classList.add('hidden');
-      currentEditorExamId = null;
-    }
-
-    function renderOptionsEditor() {
-      const type = document.getElementById('qeType').value;
-      document.getElementById('qeOptionsArea').classList.toggle('hidden', type === 'true_false' || type === 'open');
-      document.getElementById('qeTFArea').classList.toggle('hidden', type !== 'true_false');
-      document.getElementById('qeOpenArea').classList.toggle('hidden', type !== 'open');
-      if (type === 'multiple_choice' || type === 'multi_select') {
-        const list = document.getElementById('qeOptionsList');
-        const isMulti = type === 'multi_select';
-        const inputType = isMulti ? 'checkbox' : 'radio';
-        // Rebuild existing option rows with correct input type
-        const existingRows = list.querySelectorAll('div');
-        if (existingRows.length === 0) {
-          optionCount = 0;
-          addOption(); addOption(); addOption(); addOption();
-        } else {
-          existingRows.forEach(row => {
-            const inp = row.querySelector('.opt-correct');
-            if (inp && inp.type !== inputType) {
-              const wasChecked = inp.checked;
-              inp.type = inputType;
-              inp.name = 'optCorrect';
-              inp.checked = wasChecked;
-            }
-          });
-        }
-      }
-    }
-
-    function addOption() {
-      const list = document.getElementById('qeOptionsList');
-      const letter = String.fromCharCode(65 + optionCount);
-      optionCount++;
-      const isMulti = document.getElementById('qeType').value === 'multi_select';
-      const inputType = isMulti ? 'checkbox' : 'radio';
-      const div = document.createElement('div');
-      div.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px';
-      div.innerHTML = `
-        <span style="min-width:20px;font-weight:700;color:var(--primary)">${letter}.</span>
-        <input type="text" class="input-field option-text" placeholder="Option text…" style="flex:1">
-        <label style="display:flex;align-items:center;gap:4px;font-size:.82rem;white-space:nowrap">
-          <input type="${inputType}" name="optCorrect" value="${letter}" class="opt-correct"> Correct
-        </label>
-        <button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()">✕</button>
-      `;
-      list.appendChild(div);
-    }
-
-    async function saveQuestion() {
-      const errEl = document.getElementById('qeError');
-      const sucEl = document.getElementById('qeSuccess');
-      errEl.classList.add('hidden');
-      sucEl.classList.add('hidden');
-
-      const type = document.getElementById('qeType').value;
-      const questionText = document.getElementById('qeQuestion').value.trim();
-      const domain = document.getElementById('qeDomain').value;
-      const objective = document.getElementById('qeObjective').value;
-      const explanation = document.getElementById('qeExplanation').value.trim();
-      const keyTakeaway = document.getElementById('qeKeyTakeaway').value.trim();
-
-      if (!questionText) { errEl.textContent = 'Question text required'; errEl.classList.remove('hidden'); return; }
-
-      let correct_answer, all_options = {};
-
-      if (type === 'true_false') {
-        const sel = document.querySelector('input[name="qeTF"]:checked');
-        if (!sel) { errEl.textContent = 'Select correct answer'; errEl.classList.remove('hidden'); return; }
-        correct_answer = sel.value;
-      } else if (type === 'open') {
-        correct_answer = document.getElementById('qeOpenCorrect').value.trim();
-        if (!correct_answer) { errEl.textContent = 'Correct answer required'; errEl.classList.remove('hidden'); return; }
-      } else {
-        const rows = document.querySelectorAll('#qeOptionsList > div');
-        const letters = [];
-        rows.forEach((row, i) => {
-          const letter = String.fromCharCode(65 + i);
-          const text = row.querySelector('.option-text').value.trim();
-          if (text) { all_options[letter] = text; letters.push(letter); }
-        });
-        const checked = [...document.querySelectorAll('.opt-correct:checked')].map(c => c.value);
-        if (!checked.length) { errEl.textContent = 'Mark at least one correct option'; errEl.classList.remove('hidden'); return; }
-        const correctTexts = checked.map(l => all_options[l]).filter(Boolean);
-        correct_answer = type === 'multi_select' ? correctTexts : correctTexts[0];
-      }
-
-      const res = await fetch('/api/admin/add_question', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          exam_id: currentEditorExamId, question: questionText, type,
-          correct_answer, all_options, domain, objective, explanation, key_takeaway: keyTakeaway
-        })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        sucEl.classList.remove('hidden');
-        setTimeout(() => sucEl.classList.add('hidden'), 2000);
-        // Reset form
-        document.getElementById('qeQuestion').value = '';
-        document.getElementById('qeExplanation').value = '';
-        document.getElementById('qeKeyTakeaway').value = '';
-        document.getElementById('qeOptionsList').innerHTML = '';
-        optionCount = 0;
-        renderOptionsEditor();
-        loadExamQuestions();
-        loadCustomExams();
-      } else {
-        errEl.textContent = data.error || 'Error';
-        errEl.classList.remove('hidden');
-      }
-    }
-
-    async function loadExamQuestions() {
-      if (!currentEditorExamId) return;
-      const container = document.getElementById('qeQuestionsList');
-
-      if (currentEditorExamType === 'objective') {
-        // Show linked questions
-        const res = await fetch(`/api/admin/quiz_links/${currentEditorExamId}`);
-        const links = await res.json();
-        document.getElementById('qeCount').textContent = links.length;
-        if (!links.length) { container.innerHTML = '<p class="small-text">No linked questions yet.</p>'; return; }
-        container.innerHTML = `<table class="table">
-          <thead><tr><th>Pos</th><th>Source Exam</th><th>Q#</th><th>Action</th></tr></thead>
-          <tbody>${links.map(l => `<tr>
-            <td>${l.position}</td>
-            <td>Exam #${l.source_exam_id}</td>
-            <td>Q${l.source_question_num}</td>
-            <td><button class="btn btn-sm btn-danger" onclick="removeLink(${l.id})">🗑</button></td>
-          </tr>`).join('')}</tbody>
-        </table>`;
-      } else {
-        const res = await fetch(`/api/admin/exam_questions/${currentEditorExamId}`);
-        const qs = await res.json();
-        document.getElementById('qeCount').textContent = qs.length;
-        if (!qs.length) { container.innerHTML = '<p class="small-text">No questions yet.</p>'; return; }
-        container.innerHTML = `<table class="table">
-          <thead><tr><th>#</th><th>Question</th><th>Type</th><th>Domain</th><th>Action</th></tr></thead>
-          <tbody>${qs.map(q => `<tr>
-            <td>${q.question_num}</td>
-            <td class="small-text">${q.question.slice(0,80)}${q.question.length>80?'…':''}</td>
-            <td class="small-text">${q.type}</td>
-            <td class="small-text">${q.domain||'–'}</td>
-            <td><button class="btn btn-sm btn-danger" onclick="deleteQuestion(${q.id})">🗑</button></td>
-          </tr>`).join('')}</tbody>
-        </table>`;
-      }
-    }
-
-    async function removeLink(id) {
-      if (!confirm('Remove this question link?')) return;
-      const res = await fetch(`/api/admin/remove_quiz_link/${id}`, { method: 'DELETE' });
-      if (res.ok) { loadExamQuestions(); loadCustomExams(); }
-    }
-
-    async function deleteQuestion(id) {
-      if (!confirm('Delete this question?')) return;
-      const res = await fetch(`/api/admin/delete_question/${id}`, { method: 'DELETE' });
-      if (res.ok) { loadExamQuestions(); loadCustomExams(); }
-    }
-
-    // ── Skeleton download ────────────────────────────────────────────────────
-    function downloadSkeleton() {
-      const n = parseInt(document.getElementById('skeletonN').value) || 10;
-      const title = encodeURIComponent(document.getElementById('skeletonTitle').value.trim() || 'Mon Quiz');
-      window.location.href = `/api/admin/exam_skeleton?n=${n}&title=${title}`;
-    }
-
-    // ── Import quiz JSON ─────────────────────────────────────────────────────
-    function handleImportDrop(e) {
-      e.preventDefault();
-      document.getElementById('importDropZone').classList.remove('drag-over');
-      const file = e.dataTransfer.files[0];
-      if (file) handleImportFile(file);
-    }
-
-    async function handleImportFile(file) {
-      if (!file) return;
-      document.getElementById('importDropLabel').textContent = '⏳ Importing ' + file.name + '…';
-      document.getElementById('importError').classList.add('hidden');
-      document.getElementById('importSuccess').classList.add('hidden');
-
-      const form = new FormData();
-      form.append('file', file);
-      const res = await fetch('/api/admin/import_exam', { method: 'POST', body: form });
-      const data = await res.json();
-      document.getElementById('importDropLabel').textContent = '📂 Click or drag & drop your JSON file here';
-      document.getElementById('importFileInput').value = '';
-
-      if (res.ok) {
-        document.getElementById('importSuccessMsg').textContent =
-          `✅ "${data.title}" imported — ${data.imported_count} questions (ID #${data.id})`;
-        document.getElementById('importSuccess').classList.remove('hidden');
-        loadCustomExams();
-        loadAllExams();
-      } else {
-        document.getElementById('importError').textContent = data.error || 'Import failed';
-        document.getElementById('importError').classList.remove('hidden');
-      }
-    }
   </script>
 </body>
 </html>
