@@ -150,7 +150,7 @@ def get_sessions_by_user(user_id: int | str) -> list[dict]:
 
 def get_inprogress_session(user_id: int | str, exam_id: int) -> dict | None:
     docs = (_col("exam_sessions")
-            .where(filter=FieldFilter("user_id", "==", int(user_id)))
+            .where(filter=FieldFilter("user_id", "==", str(user_id)))
             .where(filter=FieldFilter("exam_id", "==", exam_id))
             .where(filter=FieldFilter("status", "==", "in_progress"))
             .limit(1)
@@ -166,7 +166,7 @@ def create_exam_session(user_id: int | str, exam_id: int, total: int,
     ref = _col("exam_sessions").document()
     started_at = _now()
     data = {
-        "user_id": int(user_id),
+        "user_id": str(user_id),
         "exam_id": exam_id,
         "total": total,
         "mode": mode,
@@ -318,7 +318,7 @@ def create_exam_token(token_str: str, exam_id: int, assigned_to: int | None,
 
 def mark_exam_token_used(token_doc_id: int | str, user_id: int | str) -> None:
     _col("exam_tokens").document(str(token_doc_id)).update({
-        "used_by": int(user_id),
+        "used_by": str(user_id),
         "used_at": _now(),
     })
 
@@ -330,7 +330,7 @@ def delete_exam_token_by_id(token_doc_id: int | str) -> None:
 def get_used_token_for_user_and_exam(user_id: int | str, exam_id: int) -> dict | None:
     """Vérifie si l'user a utilisé un token pour cet exam (accès autorisé)."""
     docs = (_col("exam_tokens")
-            .where(filter=FieldFilter("used_by", "==", int(user_id)))
+            .where(filter=FieldFilter("used_by", "==", str(user_id)))
             .where(filter=FieldFilter("exam_id", "==", exam_id))
             .limit(1)
             .stream())
