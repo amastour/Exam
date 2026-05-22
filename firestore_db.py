@@ -141,7 +141,7 @@ def get_session_by_id(session_id: int | str, user_id: int | str | None = None) -
 
 def get_sessions_by_user(user_id: int | str) -> list[dict]:
     docs = (_col("exam_sessions")
-            .where(filter=FieldFilter("user_id", "==", int(user_id)))
+            .where(filter=FieldFilter("user_id", "==", user_id))
             .stream())
     result = [_doc_to_dict(d) for d in docs]
     result.sort(key=lambda x: x.get("started_at", ""), reverse=True)
